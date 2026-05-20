@@ -10,7 +10,7 @@ Scans your source code — or any public GitHub repository — to detect every c
 
 ## What It Detects
 
-| Category | Examples |
+| Category | Examples | 
 |---|---|
 | **Node.js `crypto` module** | `createHash`, `createCipheriv`, `createSign`, `generateKeyPair`, `pbkdf2`, `scrypt` |
 | **JWT libraries** | `jsonwebtoken`, `jose`, `jwt-simple` — algorithm extraction (`HS256`, `RS256`, `none`) |
