@@ -1,0 +1,1053 @@
+{
+  "_comment": "cbom-js detection registry. Every crypto asset, pattern, and rule lives here. Add a new library by adding an entry — no code changes needed.",
+  "_version": "1.0.0",
+
+  "packages": {
+
+    "node:crypto": {
+      "aliases": ["crypto", "node:crypto"],
+      "description": "Node.js built-in crypto module",
+      "type": "builtin",
+      "methods": {
+        "createHash": {
+          "primitive": "hash",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        },
+        "createHmac": {
+          "primitive": "mac",
+          "algoArgIndex": 0,
+          "algoPrefix": "HMAC-",
+          "detection": "memberCall"
+        },
+        "createCipheriv": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "parseAlgoMode": true,
+          "detection": "memberCall"
+        },
+        "createCipher": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "parseAlgoMode": true,
+          "detection": "memberCall",
+          "notes": "createCipher is deprecated — use createCipheriv instead"
+        },
+        "createDecipheriv": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "parseAlgoMode": true,
+          "detection": "memberCall"
+        },
+        "createDecipher": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "parseAlgoMode": true,
+          "detection": "memberCall",
+          "notes": "createDecipher is deprecated — use createDecipheriv instead"
+        },
+        "createSign": {
+          "primitive": "signature",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        },
+        "createVerify": {
+          "primitive": "signature",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        },
+        "generateKeyPair": {
+          "primitive": "pke",
+          "algoArgIndex": 0,
+          "keySizeOption": "modulusLength",
+          "detection": "memberCall"
+        },
+        "generateKeyPairSync": {
+          "primitive": "pke",
+          "algoArgIndex": 0,
+          "keySizeOption": "modulusLength",
+          "detection": "memberCall"
+        },
+        "createDiffieHellman": {
+          "primitive": "keyAgreement",
+          "fixedAlgorithm": "DH",
+          "detection": "memberCall"
+        },
+        "createDiffieHellmanGroup": {
+          "primitive": "keyAgreement",
+          "fixedAlgorithm": "DH",
+          "detection": "memberCall"
+        },
+        "createECDH": {
+          "primitive": "keyAgreement",
+          "fixedAlgorithm": "ECDH",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        },
+        "randomBytes": {
+          "primitive": "prf",
+          "fixedAlgorithm": "CSPRNG",
+          "detection": "memberCall",
+          "notes": "crypto.randomBytes — cryptographically secure PRNG"
+        },
+        "randomUUID": {
+          "primitive": "prf",
+          "fixedAlgorithm": "CSPRNG-UUID",
+          "detection": "memberCall",
+          "notes": "crypto.randomUUID — cryptographically secure UUID generation"
+        },
+        "pbkdf2": {
+          "primitive": "kdf",
+          "fixedAlgorithm": "PBKDF2",
+          "detection": "memberCall"
+        },
+        "pbkdf2Sync": {
+          "primitive": "kdf",
+          "fixedAlgorithm": "PBKDF2",
+          "detection": "memberCall"
+        },
+        "scrypt": {
+          "primitive": "kdf",
+          "fixedAlgorithm": "SCRYPT",
+          "detection": "memberCall"
+        },
+        "scryptSync": {
+          "primitive": "kdf",
+          "fixedAlgorithm": "SCRYPT",
+          "detection": "memberCall"
+        },
+        "hkdfSync": {
+          "primitive": "kdf",
+          "fixedAlgorithm": "HKDF",
+          "detection": "memberCall"
+        },
+        "getCipherInfo": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "crypto-js": {
+      "aliases": ["crypto-js", "CryptoJS"],
+      "description": "CryptoJS cryptography library",
+      "type": "npm",
+      "methods": {
+        "MD5": {
+          "fixedAlgorithm": "MD5",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "SHA1": {
+          "fixedAlgorithm": "SHA-1",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "SHA256": {
+          "fixedAlgorithm": "SHA-256",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "SHA224": {
+          "fixedAlgorithm": "SHA-224",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "SHA512": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "SHA3": {
+          "fixedAlgorithm": "SHA-3",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "RIPEMD160": {
+          "fixedAlgorithm": "RIPEMD-160",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "AES": {
+          "fixedAlgorithm": "AES",
+          "primitive": "blockCipher",
+          "detection": "nestedMemberCall"
+        },
+        "DES": {
+          "fixedAlgorithm": "DES",
+          "primitive": "blockCipher",
+          "detection": "nestedMemberCall"
+        },
+        "TripleDES": {
+          "fixedAlgorithm": "3DES",
+          "primitive": "blockCipher",
+          "detection": "nestedMemberCall"
+        },
+        "Rabbit": {
+          "fixedAlgorithm": "RABBIT",
+          "primitive": "streamCipher",
+          "detection": "nestedMemberCall"
+        },
+        "RC4": {
+          "fixedAlgorithm": "RC4",
+          "primitive": "streamCipher",
+          "detection": "nestedMemberCall"
+        },
+        "RC4Drop": {
+          "fixedAlgorithm": "RC4",
+          "primitive": "streamCipher",
+          "detection": "nestedMemberCall"
+        },
+        "HmacMD5": {
+          "fixedAlgorithm": "HMAC-MD5",
+          "primitive": "mac",
+          "detection": "memberCall"
+        },
+        "HmacSHA1": {
+          "fixedAlgorithm": "HMAC-SHA1",
+          "primitive": "mac",
+          "detection": "memberCall"
+        },
+        "HmacSHA256": {
+          "fixedAlgorithm": "HMAC-SHA256",
+          "primitive": "mac",
+          "detection": "memberCall"
+        },
+        "HmacSHA512": {
+          "fixedAlgorithm": "HMAC-SHA512",
+          "primitive": "mac",
+          "detection": "memberCall"
+        },
+        "PBKDF2": {
+          "fixedAlgorithm": "PBKDF2",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "EvpKDF": {
+          "fixedAlgorithm": "EVP-KDF",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "jsonwebtoken": {
+      "aliases": ["jsonwebtoken"],
+      "description": "JSON Web Token signing and verification",
+      "type": "npm",
+      "methods": {
+        "sign": {
+          "primitive": "protocol",
+          "algoFromOption": "algorithm",
+          "optionArgIndex": 2,
+          "defaultAlgorithm": "HS256",
+          "detection": "memberCall"
+        },
+        "verify": {
+          "primitive": "protocol",
+          "algoFromOption": "algorithm",
+          "optionArgIndex": 2,
+          "detection": "memberCall"
+        },
+        "decode": {
+          "primitive": "protocol",
+          "fixedAlgorithm": "JWT-DECODE",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "jose": {
+      "aliases": ["jose"],
+      "description": "JavaScript Object Signing and Encryption (JOSE)",
+      "type": "npm",
+      "methods": {
+        "SignJWT": {
+          "primitive": "signature",
+          "algoFromOption": "alg",
+          "detection": "newExpression"
+        },
+        "jwtSign": {
+          "primitive": "signature",
+          "algoFromOption": "alg",
+          "detection": "memberCall"
+        },
+        "compactDecrypt": {
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "compactVerify": {
+          "primitive": "signature",
+          "detection": "memberCall"
+        },
+        "importSPKI": {
+          "primitive": "pke",
+          "detection": "memberCall"
+        },
+        "importPKCS8": {
+          "primitive": "pke",
+          "detection": "memberCall"
+        },
+        "generateKeyPair": {
+          "primitive": "pke",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        },
+        "generateSecret": {
+          "primitive": "pke",
+          "algoArgIndex": 0,
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "jwt-simple": {
+      "aliases": ["jwt-simple", "jwt"],
+      "description": "Simpler JWT encode/decode",
+      "type": "npm",
+      "methods": {
+        "encode": {
+          "primitive": "protocol",
+          "algoArgIndex": 2,
+          "defaultAlgorithm": "HS256",
+          "detection": "memberCall"
+        },
+        "decode": {
+          "primitive": "protocol",
+          "algoArgIndex": 2,
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "bcrypt": {
+      "aliases": ["bcrypt"],
+      "description": "bcrypt password hashing library",
+      "type": "npm",
+      "methods": {
+        "hash": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall",
+          "notes": "bcrypt — secure adaptive password hashing KDF"
+        },
+        "hashSync": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall",
+          "notes": "bcrypt — secure adaptive password hashing KDF"
+        },
+        "compare": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "compareSync": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "genSalt": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "bcryptjs": {
+      "aliases": ["bcryptjs"],
+      "description": "bcrypt in pure JavaScript",
+      "type": "npm",
+      "methods": {
+        "hash": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall",
+          "notes": "bcryptjs — pure JS bcrypt implementation"
+        },
+        "hashSync": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "compare": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "compareSync": {
+          "fixedAlgorithm": "BCRYPT",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "argon2": {
+      "aliases": ["argon2", "argon2-browser"],
+      "description": "Argon2 password hashing (winner of Password Hashing Competition)",
+      "type": "npm",
+      "methods": {
+        "hash": {
+          "fixedAlgorithm": "ARGON2",
+          "primitive": "kdf",
+          "detection": "memberCall",
+          "notes": "Argon2 — memory-hard KDF, recommended for new password hashing"
+        },
+        "verify": {
+          "fixedAlgorithm": "ARGON2",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        },
+        "hashRaw": {
+          "fixedAlgorithm": "ARGON2",
+          "primitive": "kdf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "node-forge": {
+      "aliases": ["node-forge", "forge"],
+      "description": "TLS and crypto in JavaScript",
+      "type": "npm",
+      "methods": {
+        "pki.rsa.generateKeyPair": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "keySizeOption": "bits",
+          "detection": "deepMemberCall"
+        },
+        "pki.rsa.encrypt": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "detection": "deepMemberCall"
+        },
+        "pki.rsa.decrypt": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "detection": "deepMemberCall"
+        },
+        "cipher.createCipher": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "detection": "deepMemberCall"
+        },
+        "cipher.createDecipher": {
+          "primitive": "blockCipher",
+          "algoArgIndex": 0,
+          "detection": "deepMemberCall"
+        },
+        "md.sha256.create": {
+          "fixedAlgorithm": "SHA-256",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "md.sha512.create": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "md.sha1.create": {
+          "fixedAlgorithm": "SHA-1",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "md.md5.create": {
+          "fixedAlgorithm": "MD5",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "tls.createConnection": {
+          "fixedAlgorithm": "TLS",
+          "primitive": "protocol",
+          "detection": "deepMemberCall"
+        }
+      }
+    },
+
+    "elliptic": {
+      "aliases": ["elliptic"],
+      "description": "Fast elliptic curve cryptography",
+      "type": "npm",
+      "methods": {
+        "ec": {
+          "primitive": "signature",
+          "algoArgIndex": 0,
+          "algoPrefix": "ECDSA-",
+          "detection": "newExpression",
+          "notes": "Elliptic curve — quantum vulnerable"
+        },
+        "eddsa": {
+          "primitive": "signature",
+          "algoArgIndex": 0,
+          "algoPrefix": "EdDSA-",
+          "detection": "newExpression"
+        },
+        "EC": {
+          "primitive": "signature",
+          "algoArgIndex": 0,
+          "algoPrefix": "ECDSA-",
+          "detection": "newExpression"
+        }
+      }
+    },
+
+    "tweetnacl": {
+      "aliases": ["tweetnacl", "nacl"],
+      "description": "Port of TweetNaCl — public-domain crypto library",
+      "type": "npm",
+      "methods": {
+        "sign": {
+          "fixedAlgorithm": "ED25519",
+          "primitive": "signature",
+          "detection": "memberCall"
+        },
+        "sign.keyPair": {
+          "fixedAlgorithm": "ED25519",
+          "primitive": "pke",
+          "detection": "deepMemberCall"
+        },
+        "box": {
+          "fixedAlgorithm": "X25519-XSALSA20-POLY1305",
+          "primitive": "keyAgreement",
+          "detection": "memberCall"
+        },
+        "secretbox": {
+          "fixedAlgorithm": "XSALSA20-POLY1305",
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "hash": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "randomBytes": {
+          "fixedAlgorithm": "CSPRNG",
+          "primitive": "prf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "libsodium-wrappers": {
+      "aliases": ["libsodium-wrappers", "sodium"],
+      "description": "libsodium JS wrapper — modern crypto primitives",
+      "type": "npm",
+      "methods": {
+        "crypto_sign_keypair": {
+          "fixedAlgorithm": "ED25519",
+          "primitive": "pke",
+          "detection": "memberCall"
+        },
+        "crypto_sign": {
+          "fixedAlgorithm": "ED25519",
+          "primitive": "signature",
+          "detection": "memberCall"
+        },
+        "crypto_box_keypair": {
+          "fixedAlgorithm": "X25519",
+          "primitive": "pke",
+          "detection": "memberCall"
+        },
+        "crypto_secretbox": {
+          "fixedAlgorithm": "XSALSA20-POLY1305",
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "crypto_aead_chacha20poly1305": {
+          "fixedAlgorithm": "CHACHA20-POLY1305",
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "crypto_aead_aes256gcm": {
+          "fixedAlgorithm": "AES-256-GCM",
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "crypto_hash": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "crypto_generichash": {
+          "fixedAlgorithm": "BLAKE2B",
+          "primitive": "hash",
+          "detection": "memberCall"
+        },
+        "crypto_pwhash": {
+          "fixedAlgorithm": "ARGON2ID",
+          "primitive": "kdf",
+          "detection": "memberCall",
+          "notes": "libsodium crypto_pwhash uses Argon2id"
+        },
+        "randombytes_buf": {
+          "fixedAlgorithm": "CSPRNG",
+          "primitive": "prf",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "@noble/hashes": {
+      "aliases": ["@noble/hashes", "noble-hashes"],
+      "description": "Audited and minimal JS implementations of hash functions",
+      "type": "npm",
+      "methods": {
+        "sha256": {
+          "fixedAlgorithm": "SHA-256",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "sha512": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "sha1": {
+          "fixedAlgorithm": "SHA-1",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "md5": {
+          "fixedAlgorithm": "MD5",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "sha3_256": {
+          "fixedAlgorithm": "SHA3-256",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "blake2b": {
+          "fixedAlgorithm": "BLAKE2B",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "blake3": {
+          "fixedAlgorithm": "BLAKE3",
+          "primitive": "hash",
+          "detection": "importedFunction"
+        },
+        "hmac": {
+          "fixedAlgorithm": "HMAC",
+          "primitive": "mac",
+          "detection": "importedFunction"
+        },
+        "hkdf": {
+          "fixedAlgorithm": "HKDF",
+          "primitive": "kdf",
+          "detection": "importedFunction"
+        },
+        "pbkdf2": {
+          "fixedAlgorithm": "PBKDF2",
+          "primitive": "kdf",
+          "detection": "importedFunction"
+        },
+        "scrypt": {
+          "fixedAlgorithm": "SCRYPT",
+          "primitive": "kdf",
+          "detection": "importedFunction"
+        }
+      }
+    },
+
+    "@noble/curves": {
+      "aliases": ["@noble/curves", "noble-curves"],
+      "description": "Audited elliptic curves — P256, P384, secp256k1, Ed25519",
+      "type": "npm",
+      "methods": {
+        "p256": {
+          "fixedAlgorithm": "P-256",
+          "primitive": "pke",
+          "detection": "importedObject"
+        },
+        "p384": {
+          "fixedAlgorithm": "P-384",
+          "primitive": "pke",
+          "detection": "importedObject"
+        },
+        "p521": {
+          "fixedAlgorithm": "P-521",
+          "primitive": "pke",
+          "detection": "importedObject"
+        },
+        "secp256k1": {
+          "fixedAlgorithm": "SECP256K1",
+          "primitive": "pke",
+          "detection": "importedObject",
+          "notes": "secp256k1 — used in Bitcoin/Ethereum"
+        },
+        "ed25519": {
+          "fixedAlgorithm": "ED25519",
+          "primitive": "signature",
+          "detection": "importedObject"
+        },
+        "ed448": {
+          "fixedAlgorithm": "ED448",
+          "primitive": "signature",
+          "detection": "importedObject"
+        },
+        "x25519": {
+          "fixedAlgorithm": "X25519",
+          "primitive": "keyAgreement",
+          "detection": "importedObject"
+        }
+      }
+    },
+
+    "sjcl": {
+      "aliases": ["sjcl"],
+      "description": "Stanford Javascript Crypto Library",
+      "type": "npm",
+      "methods": {
+        "encrypt": {
+          "fixedAlgorithm": "AES-CCM",
+          "primitive": "blockCipher",
+          "detection": "memberCall",
+          "notes": "SJCL defaults to AES-128-CCM"
+        },
+        "decrypt": {
+          "fixedAlgorithm": "AES-CCM",
+          "primitive": "blockCipher",
+          "detection": "memberCall"
+        },
+        "hash.sha256.hash": {
+          "fixedAlgorithm": "SHA-256",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "hash.sha512.hash": {
+          "fixedAlgorithm": "SHA-512",
+          "primitive": "hash",
+          "detection": "deepMemberCall"
+        },
+        "misc.pbkdf2": {
+          "fixedAlgorithm": "PBKDF2",
+          "primitive": "kdf",
+          "detection": "deepMemberCall"
+        },
+        "misc.scrypt": {
+          "fixedAlgorithm": "SCRYPT",
+          "primitive": "kdf",
+          "detection": "deepMemberCall"
+        },
+        "ecc.elGamal.generateKeys": {
+          "fixedAlgorithm": "ELGAMAL",
+          "primitive": "pke",
+          "detection": "deepMemberCall"
+        },
+        "ecc.ecdsa.generateKeys": {
+          "fixedAlgorithm": "ECDSA",
+          "primitive": "signature",
+          "detection": "deepMemberCall"
+        }
+      }
+    },
+
+    "jsencrypt": {
+      "aliases": ["jsencrypt", "JSEncrypt"],
+      "description": "RSA encryption/decryption in JavaScript",
+      "type": "npm",
+      "methods": {
+        "JSEncrypt": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "detection": "newExpression",
+          "notes": "JSEncrypt — RSA PKCS#1v1.5, consider using OAEP padding instead"
+        },
+        "encrypt": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "detection": "memberCall"
+        },
+        "decrypt": {
+          "fixedAlgorithm": "RSA",
+          "primitive": "pke",
+          "detection": "memberCall"
+        }
+      }
+    },
+
+    "aes-js": {
+      "aliases": ["aes-js", "aesjs"],
+      "description": "Pure JavaScript AES implementation",
+      "type": "npm",
+      "methods": {
+        "ModeOfOperation.ctr": {
+          "fixedAlgorithm": "AES-CTR",
+          "primitive": "blockCipher",
+          "detection": "deepMemberCall"
+        },
+        "ModeOfOperation.cbc": {
+          "fixedAlgorithm": "AES-CBC",
+          "primitive": "blockCipher",
+          "detection": "deepMemberCall"
+        },
+        "ModeOfOperation.cfb": {
+          "fixedAlgorithm": "AES-CFB",
+          "primitive": "blockCipher",
+          "detection": "deepMemberCall"
+        },
+        "ModeOfOperation.ofb": {
+          "fixedAlgorithm": "AES-OFB",
+          "primitive": "blockCipher",
+          "detection": "deepMemberCall"
+        },
+        "ModeOfOperation.ecb": {
+          "fixedAlgorithm": "AES-ECB",
+          "primitive": "blockCipher",
+          "detection": "deepMemberCall",
+          "notes": "ECB mode — does not provide semantic security, leaks data patterns"
+        }
+      }
+    },
+
+    "md5": {
+      "aliases": ["md5"],
+      "description": "md5 hash npm package",
+      "type": "npm",
+      "methods": {
+        "md5": {
+          "fixedAlgorithm": "MD5",
+          "primitive": "hash",
+          "detection": "directCall"
+        }
+      }
+    },
+
+    "sha.js": {
+      "aliases": ["sha.js", "shajs"],
+      "description": "SHA hash functions in pure JavaScript",
+      "type": "npm",
+      "methods": {
+        "sha": {
+          "primitive": "hash",
+          "algoArgIndex": 0,
+          "detection": "newExpression"
+        }
+      }
+    },
+
+    "uuid": {
+      "aliases": ["uuid"],
+      "description": "UUID generation",
+      "type": "npm",
+      "methods": {
+        "v4": {
+          "fixedAlgorithm": "CSPRNG-UUID",
+          "primitive": "prf",
+          "detection": "memberCall",
+          "notes": "uuid v4 uses cryptographic randomness"
+        },
+        "v1": {
+          "fixedAlgorithm": "UUID-V1",
+          "primitive": "prf",
+          "detection": "memberCall",
+          "notes": "uuid v1 is time-based — not suitable for security-sensitive identifiers"
+        }
+      }
+    },
+
+    "passport-jwt": {
+      "aliases": ["passport-jwt"],
+      "description": "Passport JWT strategy",
+      "type": "npm",
+      "methods": {
+        "Strategy": {
+          "fixedAlgorithm": "JWT",
+          "primitive": "protocol",
+          "algoFromOption": "algorithms",
+          "detection": "newExpression"
+        }
+      }
+    },
+
+    "passport-local": {
+      "aliases": ["passport-local"],
+      "description": "Passport local authentication strategy",
+      "type": "npm",
+      "methods": {
+        "Strategy": {
+          "fixedAlgorithm": "LOCAL-AUTH",
+          "primitive": "protocol",
+          "detection": "newExpression",
+          "notes": "Local strategy — verify password hashing implementation separately"
+        }
+      }
+    },
+
+    "helmet": {
+      "aliases": ["helmet"],
+      "description": "Express security headers middleware",
+      "type": "npm",
+      "methods": {
+        "hsts": {
+          "fixedAlgorithm": "HSTS",
+          "primitive": "protocol",
+          "detection": "memberCall",
+          "notes": "HTTP Strict Transport Security"
+        }
+      }
+    }
+  },
+
+  "algorithms": {
+    "_comment": "Algorithm metadata — severity, quantum safety, CWEs, primitive, cryptoFunctions, classicalSecurityLevel, OID. Every field used by cbomGenerator. No hardcoding needed in code.",
+
+    "MD5":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"], "oid": "1.2.840.113549.2.5",       "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+    "MD4":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"],                                     "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+    "MD2":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"],                                     "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+    "SHA-1":        { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"], "oid": "1.3.14.3.2.26",             "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+    "SHA1":         { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+    "SHA-256":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "2.16.840.1.101.3.4.2.1",   "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 128 },
+    "SHA-384":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "2.16.840.1.101.3.4.2.2",   "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 192 },
+    "SHA-512":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "2.16.840.1.101.3.4.2.3",   "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 256 },
+    "SHA-224":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 112 },
+    "SHA3-256":     { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 128 },
+    "SHA3-512":     { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 256 },
+    "BLAKE2B":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 256 },
+    "BLAKE3":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 256 },
+    "RIPEMD-160":   { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
+
+    "DES":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"], "oid": "1.3.14.3.2.7",             "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "3DES":         { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "RC2":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"],                                     "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "RC4":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"],                                     "primitive": "streamCipher",  "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "BLOWFISH":     { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "RABBIT":       { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "streamCipher",  "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0   },
+    "AES":          { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "AES-128":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "2.16.840.1.101.3.4.1.1",   "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "AES-192":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 192 },
+    "AES-256":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "2.16.840.1.101.3.4.1.41",  "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 256 },
+    "AES-ECB":      { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 0,  "notes": "ECB mode leaks data patterns" },
+    "AES-CBC":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "AES-GCM":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "AES-CTR":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "AES-CCM":      { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "blockCipher",   "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 128 },
+    "CHACHA20-POLY1305": { "weak": false, "quantumSafe": true, "severity": "INFO", "cwe": [],                                              "primitive": "streamCipher",  "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 256 },
+    "XSALSA20-POLY1305": { "weak": false, "quantumSafe": true, "severity": "INFO", "cwe": [],                                              "primitive": "streamCipher",  "cryptoFunctions": ["encrypt", "decrypt"],        "classicalSecurityLevel": 256 },
+
+    "RSA":          { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"], "oid": "1.2.840.113549.1.1.1",     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 112 },
+    "ECDSA":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"], "oid": "1.2.840.10045.4.3.2",      "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],            "classicalSecurityLevel": 128 },
+    "ECDH":         { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "keyAgreement",  "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "DH":           { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "keyAgreement",  "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 112 },
+    "DSA":          { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],            "classicalSecurityLevel": 112 },
+    "ED25519":      { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],            "classicalSecurityLevel": 128, "notes": "Ed25519 — quantum vulnerable but strong classically" },
+    "ED448":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],            "classicalSecurityLevel": 224 },
+    "X25519":       { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "keyAgreement",  "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "X25519-XSALSA20-POLY1305": { "weak": false, "quantumSafe": false, "severity": "MEDIUM", "cwe": ["CWE-326"],                           "primitive": "keyAgreement",  "cryptoFunctions": ["keyDerive", "encrypt"],      "classicalSecurityLevel": 128 },
+    "ELGAMAL":      { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 112 },
+    "P-256":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 128 },
+    "P-384":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 192 },
+    "P-521":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 256 },
+    "SECP256K1":    { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "pke",           "cryptoFunctions": ["encapsulate", "decapsulate"],"classicalSecurityLevel": 128 },
+
+    "PBKDF2":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],          "oid": "1.2.840.113549.1.5.12",    "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "SCRYPT":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "BCRYPT":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "ARGON2":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "ARGON2ID":     { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "HKDF":         { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 128 },
+    "EVP-KDF":      { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "kdf",           "cryptoFunctions": ["keyDerive"],                 "classicalSecurityLevel": 0,  "notes": "EVP KDF is an OpenSSL legacy KDF — prefer PBKDF2, scrypt, or Argon2" },
+
+    "HMAC":         { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],        "classicalSecurityLevel": 128 },
+    "HMAC-MD5":     { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],        "classicalSecurityLevel": 0   },
+    "HMAC-SHA1":    { "weak": true,  "quantumSafe": true,  "severity": "HIGH",     "cwe": ["CWE-327"],                                     "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],        "classicalSecurityLevel": 0   },
+    "HMAC-SHA256":  { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],        "classicalSecurityLevel": 128 },
+    "HMAC-SHA512":  { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],        "classicalSecurityLevel": 256 },
+
+    "CSPRNG":       { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "prf",           "cryptoFunctions": ["generate"],                  "classicalSecurityLevel": 256 },
+    "CSPRNG-UUID":  { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "prf",           "cryptoFunctions": ["generate"],                  "classicalSecurityLevel": 122 },
+    "UUID-V1":      { "weak": true,  "quantumSafe": true,  "severity": "LOW",      "cwe": ["CWE-338"],                                     "primitive": "prf",           "cryptoFunctions": ["generate"],                  "classicalSecurityLevel": 0,  "notes": "UUID v1 is time-based — predictable, not suitable for secrets" },
+    "MATH-RANDOM":  { "weak": true,  "quantumSafe": false, "severity": "HIGH",     "cwe": ["CWE-338"],                                     "primitive": "prf",           "cryptoFunctions": ["generate"],                  "classicalSecurityLevel": 0   },
+    "DATE-NOW-ENTROPY": { "weak": true, "quantumSafe": false, "severity": "HIGH",  "cwe": ["CWE-338"],                                     "primitive": "other",         "cryptoFunctions": [],                            "classicalSecurityLevel": 0   },
+
+    "TLS":          { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate", "keyDerive"],  "classicalSecurityLevel": 128 },
+    "TLS-1.0":      { "weak": true,  "quantumSafe": false, "severity": "CRITICAL", "cwe": ["CWE-326"],                                     "primitive": "protocol",      "cryptoFunctions": ["authenticate", "keyDerive"],  "classicalSecurityLevel": 0   },
+    "TLS-1.1":      { "weak": true,  "quantumSafe": false, "severity": "HIGH",     "cwe": ["CWE-326"],                                     "primitive": "protocol",      "cryptoFunctions": ["authenticate", "keyDerive"],  "classicalSecurityLevel": 0   },
+    "TLS-1.2":      { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate", "keyDerive"],  "classicalSecurityLevel": 112 },
+    "TLS-1.3":      { "weak": false, "quantumSafe": false, "severity": "INFO",     "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate", "keyDerive"],  "classicalSecurityLevel": 128 },
+    "SSL":          { "weak": true,  "quantumSafe": false, "severity": "CRITICAL", "cwe": ["CWE-326", "CWE-327"],                          "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 0   },
+    "TLS-CERT-VALIDATION": { "weak": true, "quantumSafe": false, "severity": "CRITICAL", "cwe": ["CWE-295"],                               "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 0   },
+    "WEAK-CIPHER-SUITE":   { "weak": true, "quantumSafe": false, "severity": "HIGH",     "cwe": ["CWE-327"],                               "primitive": "protocol",      "cryptoFunctions": ["encrypt"],                    "classicalSecurityLevel": 0   },
+    "HSTS":         { "weak": false, "quantumSafe": false, "severity": "INFO",     "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 128 },
+
+    "JWT":          { "weak": false, "quantumSafe": false, "severity": "INFO",     "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 128 },
+    "JWT-DECODE":   { "weak": false, "quantumSafe": false, "severity": "INFO",     "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 128 },
+    "LOCAL-AUTH":   { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "protocol",      "cryptoFunctions": ["authenticate"],               "classicalSecurityLevel": 128 },
+    "HS256":        { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],         "classicalSecurityLevel": 128 },
+    "HS384":        { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],         "classicalSecurityLevel": 192 },
+    "HS512":        { "weak": false, "quantumSafe": true,  "severity": "INFO",     "cwe": [],                                              "primitive": "mac",           "cryptoFunctions": ["generate", "verify"],         "classicalSecurityLevel": 256 },
+    "RS256":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 112 },
+    "RS384":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 112 },
+    "RS512":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 112 },
+    "ES256":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 128 },
+    "ES384":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 192 },
+    "ES512":        { "weak": false, "quantumSafe": false, "severity": "MEDIUM",   "cwe": ["CWE-326"],                                     "primitive": "signature",     "cryptoFunctions": ["sign", "verify"],             "classicalSecurityLevel": 256 },
+    "NONE":         { "weak": true,  "quantumSafe": false, "severity": "CRITICAL", "cwe": ["CWE-327", "CWE-347"],                          "primitive": "protocol",      "cryptoFunctions": [],                             "classicalSecurityLevel": 0,  "notes": "JWT algorithm=none disables signature verification entirely" },
+
+    "HARDCODED-SECRET": { "weak": true, "quantumSafe": false, "severity": "CRITICAL", "cwe": ["CWE-321", "CWE-798"],                       "primitive": "other",         "cryptoFunctions": [],                             "classicalSecurityLevel": 0   },
+    "DYNAMIC-ALGO":     { "weak": false, "quantumSafe": true, "severity": "LOW",      "cwe": [],                                           "primitive": "other",         "cryptoFunctions": [],                             "classicalSecurityLevel": 0,  "notes": "Algorithm value is dynamic — could not be resolved statically" }
+  },
+
+  "hardcodedPatterns": {
+    "_comment": "Variable name patterns that suggest a hardcoded secret. Tool flags when these variables are assigned string literals.",
+    "variableNames": [
+      "secret", "privateKey", "private_key", "apiKey", "api_key",
+      "jwtKey", "jwt_key", "jwtSecret", "jwt_secret",
+      "authKey", "auth_key", "authSecret", "auth_secret",
+      "encryptionKey", "encryption_key", "signingKey", "signing_key",
+      "hmacKey", "hmac_key", "aesKey", "aes_key",
+      "rsaKey", "rsa_key", "masterKey", "master_key",
+      "cryptoKey", "crypto_key", "sessionSecret", "session_secret",
+      "cookieSecret", "cookie_secret", "tokenSecret", "token_secret",
+      "accessSecret", "access_secret", "clientSecret", "client_secret",
+      "appSecret", "app_secret", "dbPassword", "db_password",
+      "databasePassword", "database_password", "adminPassword", "admin_password",
+      "password", "passwd", "pwd", "passphrase"
+    ],
+    "minLength": 8,
+    "excludePrefixes": ["$", "<", "process.env", "config.", "env.", "process."],
+    "excludePatterns": ["placeholder", "your-secret", "change-me", "replace-me", "TODO", "FIXME", "example", "test"]
+  },
+
+  "insecureRandomPatterns": {
+    "_comment": "Patterns for detecting non-cryptographic randomness used in security contexts",
+    "patterns": [
+      {
+        "object": "Math",
+        "method": "random",
+        "algorithm": "MATH-RANDOM",
+        "notes": "Math.random() is not cryptographically secure. Use crypto.randomBytes() instead"
+      },
+      {
+        "object": "Date",
+        "method": "now",
+        "algorithm": "DATE-NOW-ENTROPY",
+        "notes": "Date.now() is predictable — must not be used as cryptographic entropy",
+        "contextCheck": true
+      }
+    ]
+  },
+
+  "tlsPatterns": {
+    "_comment": "TLS/HTTPS property names and values to detect in object configurations",
+    "weakVersions": ["TLSv1", "TLSv1_method", "TLSv1_1", "TLSv1_1_method", "SSLv2", "SSLv2_method", "SSLv3", "SSLv3_method"],
+    "weakCiphers": ["RC4", "DES", "MD5", "NULL", "EXPORT", "aNULL", "eNULL", "LOW", "3DES"],
+    "propertyMap": {
+      "secureProtocol":          { "type": "version",    "weakValues": ["TLSv1", "TLSv1_method", "TLSv1_1", "SSLv2", "SSLv3"] },
+      "minVersion":              { "type": "version",    "weakValues": ["TLSv1", "TLSv1.1"] },
+      "maxVersion":              { "type": "version",    "weakValues": [] },
+      "ciphers":                 { "type": "cipherSuite","weakSubstrings": ["RC4", "DES", "MD5", "NULL", "EXPORT"] },
+      "rejectUnauthorized":      { "type": "boolean",    "weakValue": false, "algorithm": "TLS-CERT-VALIDATION" },
+      "checkServerIdentity":     { "type": "function",   "algorithm": "TLS-CERT-VALIDATION" }
+    },
+    "envVars": {
+      "NODE_TLS_REJECT_UNAUTHORIZED": { "weakValue": "0", "algorithm": "TLS-CERT-VALIDATION" }
+    }
+  }
+}

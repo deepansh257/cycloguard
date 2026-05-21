@@ -1,8 +1,10 @@
+// src/detectors/index.ts
+// Orchestrates all detectors. Registry-driven detector handles all library detection.
+// TLS and hardcoded secrets run separately as they have different detection patterns.
+
 import { TSESTree } from '@typescript-eslint/typescript-estree';
 import { CryptoFinding } from '../types';
-import { detectNodeCrypto } from './nodeCrypto';
-import { detectJWT } from './jwtDetector';
-import { detectCryptoLibs } from './cryptoLibs';
+import { detectFromRegistry } from './registryDetector';
 import { detectTLS } from './tlsDetector';
 import { detectHardcodedSecrets } from './hardcodedSecrets';
 
@@ -20,10 +22,11 @@ export function runAllDetectors(
   const errors: string[] = [];
 
   const detectors = [
-    { name: 'node:crypto', fn: detectNodeCrypto },
-    { name: 'jwt', fn: detectJWT },
-    { name: 'crypto-libs', fn: detectCryptoLibs },
+    // Main detector — reads ALL library/method rules from libraries.json
+    { name: 'registry', fn: detectFromRegistry },
+    // TLS detector — reads tlsPatterns from libraries.json
     { name: 'tls', fn: detectTLS },
+    // Hardcoded secrets — reads hardcodedPatterns + insecureRandomPatterns from libraries.json
     { name: 'hardcoded-secrets', fn: detectHardcodedSecrets }
   ];
 
@@ -36,10 +39,7 @@ export function runAllDetectors(
     }
   }
 
-  // Global deduplication across all detectors
-  const deduped = deduplicateFindings(findings);
-
-  return { findings: deduped, errors };
+  return { findings: deduplicateFindings(findings), errors };
 }
 
 function deduplicateFindings(findings: CryptoFinding[]): CryptoFinding[] {
