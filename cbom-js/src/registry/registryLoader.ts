@@ -1,6 +1,3 @@
-// src/registry/registryLoader.ts
-// Loads libraries.json and exposes typed, pre-indexed access to all rules
-
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -34,6 +31,10 @@ export interface AlgorithmMeta {
   cwe: string[];
   oid?: string;
   notes?: string;
+  // Fields used by cbomGenerator — all sourced from libraries.json
+  primitive?: string;
+  cryptoFunctions?: string[];
+  classicalSecurityLevel?: number;
 }
 
 export interface HardcodedPatterns {
