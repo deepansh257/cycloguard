@@ -1,0 +1,84 @@
+name: Run Trivy
+description: Runs Trivy scans for SBOM, filesystem, and optional scanners.
+inputs:
+  config-file:
+    description: Path to security pipeline config file.
+    required: true
+  report-dir:
+    description: Directory where Trivy scan outputs are stored.
+    required: true
+  scan-prefix:
+    description: Prefix for output report files (for initial scan vs rescan).
+    required: false
+    default: trivy
+runs:
+  using: composite
+  steps:
+    - name: Install Trivy
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+
+    - name: Run per-app SBOM scans
+      shell: bash
+      run: |
+        threshold=$(yq -r '.gate.threshold' "${{ inputs.config-file }}")
+        trivy_levels="CRITICAL"
+        if [[ "$threshold" == "high" ]]; then
+          trivy_levels="HIGH,CRITICAL"
+        fi
+
+        mkdir -p "${{ inputs.report-dir }}"
+
+        for app in node java python; do
+          sbom_file="${{ inputs.report-dir }}/sbom/${app}/cyclonedx.json"
+          out_json="${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-${app}.json"
+          trivy sbom "$sbom_file" --format json --output "$out_json" --severity "$trivy_levels" --ignore-unfixed || echo '{}' > "$out_json"
+        done
+
+    - name: Run filesystem scan
+      shell: bash
+      run: |
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        scan_root="$config_dir/apps"
+        fs_enabled=$(yq -r '.scans.filesystem.enabled' "${{ inputs.config-file }}")
+        if [[ "$fs_enabled" == "true" ]]; then
+          trivy fs "$scan_root" --format json --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json" || echo '{}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json"
+        else
+          echo '{}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json"
+        fi
+
+    - name: Run optional secret/misconfig scan
+      shell: bash
+      run: |
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        scan_root="$config_dir/apps"
+        secret_enabled=$(yq -r '.scans.secret.enabled' "${{ inputs.config-file }}")
+        misconfig_enabled=$(yq -r '.scans.misconfig.enabled' "${{ inputs.config-file }}")
+        scanners="vuln"
+        [[ "$secret_enabled" == "true" ]] && scanners="${scanners},secret"
+        [[ "$misconfig_enabled" == "true" ]] && scanners="${scanners},misconfig"
+        trivy fs "$scan_root" --scanners "$scanners" --format sarif --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" || true
+        test -f "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" || echo '{"version":"2.1.0","runs":[]}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif"
+
+    - name: Merge JSON reports
+      shell: bash
+      run: |
+        jq -n \
+          --arg scan_prefix "${{ inputs.scan-prefix }}" \
+          --slurpfile node "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-node.json" \
+          --slurpfile java "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-java.json" \
+          --slurpfile python "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-python.json" \
+          --slurpfile fs "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json" \
+          '{scan_prefix:$scan_prefix,reports:{node:($node[0]//{}),java:($java[0]//{}),python:($python[0]//{}),filesystem:($fs[0]//{})}}' \
+          > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-merged.json"
+
+        if [[ "${{ inputs.scan-prefix }}" != "trivy" ]]; then
+          cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-merged.json" "${{ inputs.report-dir }}/trivy-merged.json"
+          cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" "${{ inputs.report-dir }}/trivy-results.sarif" || true
+        fi

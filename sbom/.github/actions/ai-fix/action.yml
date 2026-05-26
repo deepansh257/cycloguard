@@ -1,0 +1,50 @@
+name: AI Fix
+description: Attempts conservative automated dependency remediation.
+inputs:
+  config-file:
+    description: Path to security pipeline config file.
+    required: true
+  report-dir:
+    description: Directory where reports and remediation logs are stored.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Node auto-upgrade
+      shell: bash
+      run: |
+        enabled=$(yq -r '.ai.autofix.enabled' "${{ inputs.config-file }}")
+        [[ "$enabled" != "true" ]] && exit 0
+        node_path=$(yq -r '.applications.node.path' "${{ inputs.config-file }}")
+        pushd "$node_path"
+        npm audit fix || true
+        npm update || true
+        popd
+
+    - name: Python auto-upgrade
+      shell: bash
+      run: |
+        enabled=$(yq -r '.ai.autofix.enabled' "${{ inputs.config-file }}")
+        [[ "$enabled" != "true" ]] && exit 0
+        python_path=$(yq -r '.applications.python.path' "${{ inputs.config-file }}")
+        pushd "$python_path"
+        pip install --upgrade pip
+        pip install pip-tools
+        pip install -r requirements.txt --upgrade || true
+        popd
+
+    - name: Java auto-upgrade
+      shell: bash
+      run: |
+        enabled=$(yq -r '.ai.autofix.enabled' "${{ inputs.config-file }}")
+        [[ "$enabled" != "true" ]] && exit 0
+        java_path=$(yq -r '.applications.java.path' "${{ inputs.config-file }}")
+        pushd "$java_path"
+        ./gradlew dependencyUpdates || true
+        ./gradlew build -x test || true
+        popd
+
+    - name: Collect dependency diff
+      shell: bash
+      run: |
+        git status --porcelain > "${{ inputs.report-dir }}/dependency-changes.txt"

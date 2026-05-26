@@ -1,0 +1,31 @@
+name: Slack Notify
+description: Send security pipeline summary to Slack.
+inputs:
+  report-dir:
+    description: Directory containing pipeline reports.
+    required: true
+  run-url:
+    description: URL of the current GitHub Actions run.
+    required: true
+  webhook-url:
+    description: Slack incoming webhook URL.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Build payload
+      shell: bash
+      run: |
+        node sbom/scripts/build_slack_payload.js \
+          --report-dir "${{ inputs.report-dir }}" \
+          --run-url "${{ inputs.run-url }}" \
+          --output "${{ inputs.report-dir }}/slack-payload.json"
+
+    - name: Post to Slack
+      if: ${{ inputs.webhook-url != '' }}
+      shell: bash
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+          --data @"${{ inputs.report-dir }}/slack-payload.json" \
+          "${{ inputs.webhook-url }}"
+
