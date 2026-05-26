@@ -211,9 +211,6 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
   const dbDir = path.join(os.tmpdir(), `cbomjs-codeql-db-${Date.now()}`);
   const tempQueryFiles: string[] = [];
 
-  // ✅ Write generated queries INSIDE the queriesDir, not os.tmpdir()
-  // CodeQL requires query files to be reachable via a downward-relative path
-  // from within the CodeQL search path / QL pack root.
   const generatedDir = path.join(opts.queriesDir, '_generated');
   fs.mkdirSync(generatedDir, { recursive: true });
 
@@ -241,7 +238,7 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
       console.error(`❌ CodeQL database creation failed (exit code: ${dbResult.status})`);
       return [];
     }
-    console.log('✅ CodeQL database created successfully.');
+    console.log('CodeQL database created successfully.');
 
     console.log('Installing CodeQL query pack dependencies...');
     const packInstallResult = spawnSync(
@@ -254,7 +251,6 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
       console.error('❌ codeql pack install failed — queries may not resolve stdlib imports');
     }
 
-    // ✅ Write to generatedDir, not os.tmpdir()
     const ts       = Date.now();
     const regPath  = path.join(generatedDir, `registry-${ts}.ql`);
     const weakPath = path.join(generatedDir, `weakalgo-${ts}.ql`);
@@ -291,16 +287,16 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
     if (analyzeResult.error)  console.error('[CodeQL Analyze spawn error]', analyzeResult.error);
 
     if (analyzeResult.status !== 0 || analyzeResult.error) {
-      console.error(`❌ CodeQL analyze failed (exit code: ${analyzeResult.status})`);
+      console.error(`CodeQL analyze failed (exit code: ${analyzeResult.status})`);
       return [];
     }
 
     if (!fs.existsSync(sarifOut)) {
-      console.error('❌ SARIF output file was not created.');
+      console.error('SARIF output file was not created.');
       return [];
     }
 
-    console.log(`✅ SARIF written to ${sarifOut}`);
+    console.log(`SARIF written to ${sarifOut}`);
     const sarif = JSON.parse(fs.readFileSync(sarifOut, 'utf8'));
     return parseSARIF(sarif, opts.sourceRoot);
 
@@ -325,7 +321,6 @@ function parseSARIF(sarif: any, sourceRoot: string): SARIFResult[] {
       const absPath = path.resolve(sourceRoot, relativeUri.replace(/^file:\/\/\//, ''));
       const startLine = loc.region?.startLine ?? 0;
 
-      // ✅ Read actual source snippet instead of using SARIF message
       let snippet = '';
       try {
         if (fs.existsSync(absPath)) {

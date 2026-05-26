@@ -22,8 +22,8 @@ export function bridgeCodeQLResults(sarif: SARIFResult[]): CryptoFinding[] {
       severity:        meta.severity ?? 'HIGH',
       weak:            meta.weak ?? false,
       quantumSafe:     meta.quantumSafe ?? false,
-      context:         r.snippet || r.message,   // ✅ real code, fallback to message if snippet empty
-      notes:           `CodeQL taint path detected: ${r.message}`,  // keep message here — it's useful as a description
+      context:         r.snippet || r.message,  
+      notes:           `CodeQL taint path detected: ${r.message}`,
       cwe:             meta.cwe ?? [],
       detectionSource: 'codeql',
       taintPath:       r.codeFlows[0] ?? [],
