@@ -1,6 +1,3 @@
-// src/detectors/hardcodedSecrets.ts
-// Hardcoded secrets + insecure random — rules driven by libraries.json
-
 import { TSESTree } from '@typescript-eslint/typescript-estree';
 import { CryptoFinding } from '../types';
 import { traverseAST, getStringValue, getSnippet } from '../utils/detectorHelpers';

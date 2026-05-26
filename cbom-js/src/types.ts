@@ -9,21 +9,25 @@ export interface CryptoFinding {
   weak: boolean;
   quantumSafe: boolean;
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-  context?: string; // surrounding code snippet
+  context?: string;
   cwe?: string[];
   notes?: string;
+  detectionSource?: 'ast' | 'codeql';
+  taintPath?: string[];
 }
 
 export interface ScanOptions {
-  source: string;           // local path or github url
-  output: string;           // output file path
-  format: 'cyclonedx';      // only cyclonedx for now
-  failOnWeak: boolean;      // exit 1 if weak crypto found
-  failOnSeverity?: string;  // exit 1 if severity >= this
+  source: string;           
+  output: string;           
+  format: 'cyclonedx';      
+  failOnWeak: boolean;      
+  failOnSeverity?: string;  
   verbose: boolean;
-  include?: string[];       // file patterns to include
-  exclude?: string[];       // file patterns to exclude
-  branch?: string;          // git branch if using github url
+  include?: string[];      
+  exclude?: string[];      
+  branch?: string;          
+  useCodeQL?: boolean;
+  codeqlPath?: string;      
 }
 
 export interface ScanResult {
