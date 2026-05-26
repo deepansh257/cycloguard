@@ -19,7 +19,8 @@ runs:
     - name: Generate Node SBOM
       shell: bash
       run: |
-        node_path=$(yq -r '.applications.node.path' "${{ inputs.config-file }}")
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        node_path="$config_dir/$(yq -r '.applications.node.path' "${{ inputs.config-file }}")"
         mkdir -p "${{ inputs.report-dir }}/sbom/node"
         npx @cyclonedx/cdxgen -t nodejs -o "${{ inputs.report-dir }}/sbom/node/cyclonedx.json" "$node_path"
         cp "${{ inputs.report-dir }}/sbom/node/cyclonedx.json" "${{ inputs.report-dir }}/sbom/node/spdx.json"
@@ -27,7 +28,8 @@ runs:
     - name: Generate Java SBOM
       shell: bash
       run: |
-        java_path=$(yq -r '.applications.java.path' "${{ inputs.config-file }}")
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        java_path="$config_dir/$(yq -r '.applications.java.path' "${{ inputs.config-file }}")"
         mkdir -p "${{ inputs.report-dir }}/sbom/java"
         npx @cyclonedx/cdxgen -t java -o "${{ inputs.report-dir }}/sbom/java/cyclonedx.json" "$java_path"
         cp "${{ inputs.report-dir }}/sbom/java/cyclonedx.json" "${{ inputs.report-dir }}/sbom/java/spdx.json"
@@ -35,7 +37,8 @@ runs:
     - name: Generate Python SBOM
       shell: bash
       run: |
-        python_path=$(yq -r '.applications.python.path' "${{ inputs.config-file }}")
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        python_path="$config_dir/$(yq -r '.applications.python.path' "${{ inputs.config-file }}")"
         mkdir -p "${{ inputs.report-dir }}/sbom/python"
         cyclonedx-py requirements "$python_path/requirements.txt" -o "${{ inputs.report-dir }}/sbom/python/cyclonedx.json" --of JSON
         cp "${{ inputs.report-dir }}/sbom/python/cyclonedx.json" "${{ inputs.report-dir }}/sbom/python/spdx.json"
