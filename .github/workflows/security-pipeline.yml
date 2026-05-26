@@ -149,10 +149,18 @@ jobs:
 
       - name: Upload reports artifact
         if: always()
+        shell: bash
+        run: |
+          echo "Report directory: $REPORT_DIR"
+          find "$REPORT_DIR" -maxdepth 3 -type f | sort
+
+      - name: Upload reports artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: security-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.REPORT_DIR }}
+          if-no-files-found: error
 
       - name: Slack notification
         # Temporarily disabled: SBOM-only rollout
@@ -170,4 +178,3 @@ jobs:
         run: |
           echo "Gate failed: Critical/High vulnerabilities found."
           exit 1
-
