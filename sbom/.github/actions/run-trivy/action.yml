@@ -38,15 +38,17 @@ runs:
         for app in node java python; do
           sbom_file="${{ inputs.report-dir }}/sbom/${app}/cyclonedx.json"
           out_json="${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-${app}.json"
-          trivy sbom "$sbom_file" --format json --output "$out_json" --severity "$trivy_levels" --ignore-unfixed || true
+          trivy sbom "$sbom_file" --format json --output "$out_json" --severity "$trivy_levels" --ignore-unfixed || echo '{}' > "$out_json"
         done
 
     - name: Run filesystem scan
       shell: bash
       run: |
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        scan_root="$config_dir/apps"
         fs_enabled=$(yq -r '.scans.filesystem.enabled' "${{ inputs.config-file }}")
         if [[ "$fs_enabled" == "true" ]]; then
-          trivy fs apps --format json --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json" || true
+          trivy fs "$scan_root" --format json --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json" || echo '{}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json"
         else
           echo '{}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-fs.json"
         fi
@@ -54,12 +56,14 @@ runs:
     - name: Run optional secret/misconfig scan
       shell: bash
       run: |
+        config_dir=$(dirname "${{ inputs.config-file }}")
+        scan_root="$config_dir/apps"
         secret_enabled=$(yq -r '.scans.secret.enabled' "${{ inputs.config-file }}")
         misconfig_enabled=$(yq -r '.scans.misconfig.enabled' "${{ inputs.config-file }}")
         scanners="vuln"
         [[ "$secret_enabled" == "true" ]] && scanners="${scanners},secret"
         [[ "$misconfig_enabled" == "true" ]] && scanners="${scanners},misconfig"
-        trivy fs apps --scanners "$scanners" --format sarif --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" || true
+        trivy fs "$scan_root" --scanners "$scanners" --format sarif --output "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" || true
         test -f "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" || echo '{"version":"2.1.0","runs":[]}' > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif"
 
     - name: Merge JSON reports
