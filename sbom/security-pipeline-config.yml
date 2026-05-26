@@ -1,0 +1,50 @@
+applications:
+  node:
+    path: apps/vuln_node.js
+    ecosystem: npm
+  java:
+    path: apps/vuln_java
+    ecosystem: gradle
+  python:
+    path: apps/vuln_python
+    ecosystem: pip
+
+gate:
+  threshold: high
+
+scans:
+  dependency:
+    enabled: true
+  filesystem:
+    enabled: true
+  secret:
+    enabled: true
+  misconfig:
+    enabled: true
+
+reports:
+  output_dir: reports
+  formats:
+    - json
+    - sarif
+    - html
+
+github:
+  auto_issue:
+    enabled: true
+    label_set:
+      - security
+      - trivy
+      - automated
+
+slack:
+  enabled: true
+  notify_on:
+    - pass
+    - fail
+
+ai:
+  autofix:
+    enabled: true
+    mode: conservative
+    max_changes_per_run: 30
