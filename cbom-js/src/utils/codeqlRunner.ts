@@ -243,7 +243,7 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
     );
     if (packInstallResult.stderr) console.log('[pack install stderr]', packInstallResult.stderr);
     if (packInstallResult.status !== 0) {
-      console.error('❌ codeql pack install failed — queries may not resolve stdlib imports');
+      console.error('codeql pack install failed — queries may not resolve stdlib imports');
     }
 
     const ts       = Date.now();
