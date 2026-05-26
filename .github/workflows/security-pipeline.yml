@@ -73,8 +73,6 @@ jobs:
           report-dir: ${{ env.REPORT_DIR }}
 
       - name: Run Trivy scans
-        # Temporarily disabled: SBOM-only rollout
-        if: false
         id: trivy
         uses: ./sbom/.github/actions/run-trivy
         with:
@@ -82,8 +80,6 @@ jobs:
           report-dir: ${{ env.REPORT_DIR }}
 
       - name: Parse report and evaluate gate
-        # Temporarily disabled: SBOM-only rollout
-        if: false
         id: gate
         shell: bash
         run: |
