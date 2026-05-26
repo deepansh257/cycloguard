@@ -35,7 +35,6 @@ export function deduplicateFindings(
   astFindings: CryptoFinding[],
   codeqlFindings: CryptoFinding[]
 ): CryptoFinding[] {
-  // Key on location + line — prefer CodeQL finding when both report the same spot
   const codeqlKeys = new Set(
     codeqlFindings.map(f => `${f.location}:${f.line}`)
   );

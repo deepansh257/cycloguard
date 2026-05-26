@@ -4,7 +4,7 @@ import * as path from 'path';
 import { ScanOptions, ScanResult } from './types';
 import { findFiles, readFile, getRelativePath } from './parser/fileScanner';
 import { parseSource } from './parser/astParser';
-import { runAllDetectors, runCodeQLPass } from './detectors/index';   // ← add runCodeQLPass
+import { runAllDetectors, runCodeQLPass } from './detectors/index';
 import { generateCBOM } from './cbom/cbomGenerator';
 import { buildSummary, printBanner, printScanStart, printProgress, printScanComplete, printFindings, printOutput } from './utils/reporter';
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
@@ -24,10 +24,8 @@ program
   .option('-v, --verbose', 'Print all findings including INFO level', false)
   .option('--exclude <patterns>', 'Comma-separated glob patterns to exclude', '')
   .option('--include <patterns>', 'Comma-separated glob patterns to include', '')
-  // ── NEW ──────────────────────────────────────────────────────────────────────
   .option('--codeql',             'Run CodeQL taint analysis after AST scan (requires codeql CLI)')
   .option('--codeql-path <path>', 'Path to codeql binary (default: codeql on PATH)')
-  // ─────────────────────────────────────────────────────────────────────────────
   .action(async (opts) => {
     printBanner();
 
@@ -41,10 +39,8 @@ program
       branch:          opts.branch,
       exclude:         opts.exclude ? opts.exclude.split(',').map((s: string) => s.trim()) : [],
       include:         opts.include ? opts.include.split(',').map((s: string) => s.trim()) : [],
-      // ── NEW ────────────────────────────────────────────────────────────────
       useCodeQL:       opts.codeql   ?? false,
       codeqlPath:      opts.codeqlPath ?? undefined,
-      // ───────────────────────────────────────────────────────────────────────
     };
 
     let sourceResult;

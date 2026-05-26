@@ -20,13 +20,11 @@ export function runAllDetectors(
 ): DetectorResult {
   const findings: CryptoFinding[] = [];
   const errors: string[] = [];
-
   const detectors = [
     { name: 'registry',          fn: detectFromRegistry    },
     { name: 'tls',               fn: detectTLS             },
     { name: 'hardcoded-secrets', fn: detectHardcodedSecrets },
   ];
-
   for (const detector of detectors) {
     try {
       const result = detector.fn(ast, filePath, source);
@@ -35,17 +33,15 @@ export function runAllDetectors(
       errors.push(`Detector '${detector.name}' failed on ${filePath}: ${err?.message}`);
     }
   }
-
   return { findings: deduplicateASTFindings(findings), errors };
 }
 
-// Called once after the full per-file AST pass, only when --codeql flag is set
 export async function runCodeQLPass(
   sourceRoot: string,
   astFindings: CryptoFinding[],
   options: ScanOptions
 ): Promise<CryptoFinding[]> {
-  const queriesDir = path.resolve(__dirname, '../../queries'); // optional static .ql dir
+  const queriesDir = path.resolve(__dirname, '../../queries');
   console.log('[CodeQL] queriesDir resolved to:', queriesDir);
 console.log('[CodeQL] queriesDir exists?', fs.existsSync(queriesDir));
   const sarifResults = runCodeQL({

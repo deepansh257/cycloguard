@@ -32,7 +32,6 @@ console.log("Exists?", fs.existsSync(codeqlBin));
       }
       return true;
     }
-    // For a bare command name like 'codeql', verify it runs
     execSync(`"${codeqlBin}" version`, { stdio: 'ignore' });
     return true;
   } catch (err: any) {
@@ -50,9 +49,6 @@ console.log("Exists?", fs.existsSync(codeqlBin));
 function buildSinkNamesFromRegistry(): string[] {
   const registry = getRegistry();
   const sinks = new Set<string>();
-
-  // packageRules is Map<string, PackageRule>
-  // PackageRule.methods is Record<string, MethodRule> — keys are the method names
   registry.packageRules.forEach((pkg) => {
     for (const methodName of Object.keys(pkg.methods)) {
       // "AES.encrypt" → "encrypt", "createHash" → "createHash"
@@ -81,7 +77,6 @@ function buildWeakAlgosFromRegistry(): string[] {
 
 function buildSecretVarPatternFromRegistry(): string {
   const registry = getRegistry();
-  // hardcodedVarNames is Set<string> of lowercased substrings
   const escaped = [...registry.hardcodedVarNames]
     .filter(Boolean)
     .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&'));
@@ -235,7 +230,7 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
     if (dbResult.error)  console.error('[CodeQL DB spawn error]', dbResult.error);
 
     if (dbResult.status !== 0 || dbResult.error) {
-      console.error(`❌ CodeQL database creation failed (exit code: ${dbResult.status})`);
+      console.error(`CodeQL database creation failed (exit code: ${dbResult.status})`);
       return [];
     }
     console.log('CodeQL database created successfully.');
@@ -302,7 +297,6 @@ export function runCodeQL(opts: CodeQLRunnerOptions): SARIFResult[] {
 
   } finally {
     fs.rmSync(dbDir, { recursive: true, force: true });
-    // Clean up generated query files but keep the dir
     for (const f of tempQueryFiles) {
       try { fs.rmSync(f, { force: true }); } catch {}
     }
@@ -337,7 +331,7 @@ function parseSARIF(sarif: any, sourceRoot: string): SARIFResult[] {
         filePath:    absPath,
         startLine,
         startColumn: loc.region?.startColumn ?? 0,
-        snippet,     // ← add this field to SARIFResult interface too
+        snippet,    
         codeFlows: (result.codeFlows ?? []).map((cf: any) =>
           (cf.threadFlows ?? []).flatMap((tf: any) =>
             (tf.locations ?? []).map((tfl: any) => {
