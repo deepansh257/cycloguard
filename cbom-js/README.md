@@ -1,491 +1,284 @@
-# cycloguard
-CycloneDX-native security orchestration platform that generates SBOMs and CBOMs, detects dependency and cryptographic risks, automates remediation workflows, and delivers actionable security intelligence through GitHub and Slack integrations.
+# cbom-js
 
+A static analysis tool that scans JavaScript/TypeScript codebases for cryptographic vulnerabilities and generates a **Cryptography Bill of Materials (CBOM)** in [CycloneDX 1.6](https://cyclonedx.org/specification/overview/) format.
 
-**Cryptography Bill of Materials (CBOM) generator for JavaScript, TypeScript, and Node.js projects.**
-
-Scans your source code — or any public GitHub repository — to detect every cryptographic algorithm, library, and pattern in use, then outputs a structured [CycloneDX 1.6](https://cyclonedx.org/) CBOM. Designed to slot directly into your CI/CD pipeline alongside SBOM and vulnerability scanning.
-
----
-
-## What It Detects
-
-| Category | Examples | 
-|---|---|
-| **Node.js `crypto` module** | `createHash`, `createCipheriv`, `createSign`, `generateKeyPair`, `pbkdf2`, `scrypt` |
-| **JWT libraries** | `jsonwebtoken`, `jose`, `jwt-simple` — algorithm extraction (`HS256`, `RS256`, `none`) |
-| **Crypto libraries** | `crypto-js`, `node-forge`, `bcrypt`, `argon2`, `elliptic`, `tweetnacl`, `libsodium` |
-| **TLS/HTTPS config** | Weak versions (`TLSv1`, `SSLv3`), disabled cert validation, weak cipher suites |
-| **Hardcoded secrets** | Keys/secrets assigned to variables, `Math.random()` for crypto, `Date.now()` as entropy |
-
-### Severity Ratings
-
-| Severity | Examples |
-|---|---|
-| `CRITICAL` | MD5, RC4, DES, `algorithm: 'none'` in JWT, `rejectUnauthorized: false`, hardcoded secrets |
-| `HIGH` | SHA-1, 3DES, ECB mode, `Math.random()` for crypto, TLSv1/TLSv1.1 |
-| `MEDIUM` | RSA/ECDSA/DH (quantum-vulnerable but classically sound), RSA < 4096-bit |
-| `LOW` | Minor configuration concerns |
-| `INFO` | Secure algorithms noted for inventory (SHA-256, AES-256-GCM, BCRYPT, ARGON2) |
-
-### CWEs Mapped
-
-- `CWE-327` — Use of a Broken or Risky Cryptographic Algorithm
-- `CWE-326` — Inadequate Encryption Strength
-- `CWE-338` — Use of Cryptographically Weak PRNG
-- `CWE-321` — Use of Hard-coded Cryptographic Key
-- `CWE-295` — Improper Certificate Validation
-- `CWE-347` — Improper Verification of Cryptographic Signature
+It combines two scanning engines:
+- **AST-based engine** — fast, registry-driven detection using `@typescript-eslint/typescript-estree`
+- **CodeQL engine** *(optional)* — deep taint-flow analysis that tracks how secrets and weak algorithms flow through the codebase
 
 ---
 
-## Prerequisites
+## Table of Contents
 
-- **Node.js** >= 18.x
-- **npm** >= 9.x
-- **Git** (required only when scanning GitHub repositories)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI Options](#cli-options)
+- [How It Works](#how-it-works)
+  - [AST Engine](#ast-engine)
+  - [CodeQL Engine](#codeql-engine)
+  - [Result Deduplication](#result-deduplication)
+- [CodeQL Setup](#codeql-setup)
+  - [Download CodeQL](#download-codeql)
+  - [Install Query Pack Dependencies](#install-query-pack-dependencies)
+  - [Running with CodeQL](#running-with-codeql)
+- [Caching](#caching)
+  - [Repository Cache](#repository-cache)
+  - [CodeQL Database Cache](#codeql-database-cache)
+  - [Clearing the Cache](#clearing-the-cache)
+- [Output Format](#output-format)
+- [Project Structure](#project-structure)
+- [Extending the Tool](#extending-the-tool)
+- [.gitignore Recommendations](#gitignore-recommendations)
 
-Verify:
-```bash
-node --version   # >= 18.0.0
-npm --version    # >= 9.0.0
-git --version    # any recent version
-```
+---
+
+## Features
+
+- Detects **weak cryptographic algorithms** — MD5, SHA-1, RC4, DES, and more
+- Detects **insecure randomness** — `Math.random()`, `Date.now()` used in security contexts
+- Detects **hardcoded secrets** — private keys, passwords, API keys in source code
+- Detects **weak TLS configuration** — insecure protocol versions, weak cipher suites, disabled certificate validation
+- Detects **JWT vulnerabilities** — weak algorithm selections in `jsonwebtoken`, `jose`
+- **CodeQL taint analysis** *(optional)* — tracks data flow from secret sources to crypto sinks across the entire codebase
+- Supports scanning **local directories** or **remote GitHub/GitLab/Bitbucket repositories**
+- Generates **CycloneDX 1.6 CBOM JSON** with full evidence, CWE mappings, and quantum-safety ratings
+- **Persistent caching** for both cloned repositories and CodeQL databases — repeat scans are fast
 
 ---
 
 ## Installation
 
-### Option A — Run from source (recommended for development)
-
 ```bash
-# 1. Clone this repository
-git clone https://github.com/your-org/cbom-js.git
+git clone https://github.com/your-org/cbom-js
 cd cbom-js
-
-# 2. Install dependencies
 npm install
-
-# 3. Run directly with ts-node (no build needed)
-npm run scan -- --source ./path/to/project --output cbom.json
-```
-
-### Option B — Build and install globally
-
-```bash
-# Build TypeScript
-npm run build
-
-# Install globally so 'cbom-js' works from anywhere
-npm install -g .
-
-# Verify
-cbom-js --version
 ```
 
 ---
 
-## Usage
+## Quick Start
 
-### Basic syntax
-
-```
-cbom-js [options]
-```
-
-### All options
-
-| Option | Alias | Default | Description |
-|---|---|---|---|
-| `--source <path-or-url>` | `-s` | *(required)* | Local directory path **or** GitHub URL |
-| `--output <file>` | `-o` | `cbom.json` | Output file path |
-| `--branch <name>` | `-b` | default branch | Git branch (only used with GitHub URLs) |
-| `--fail-on-weak` | | `false` | Exit code 1 if any weak algorithms found |
-| `--fail-on-severity <level>` | | none | Exit code 1 if findings at or above this severity (`CRITICAL`, `HIGH`, `MEDIUM`) |
-| `--verbose` | `-v` | `false` | Print all findings including INFO |
-| `--exclude <patterns>` | | see below | Comma-separated glob patterns to exclude |
-| `--include <patterns>` | | `**/*.js,**/*.ts,...` | Comma-separated glob patterns to include |
-| `--help` | `-h` | | Show help |
-| `--version` | | | Show version |
-
----
-
-## Scanning a Local Project
-
-### Scan current directory
-
+**Scan a local directory:**
 ```bash
-cbom-js --source .
+npx ts-node src/index.ts --source ./my-project --output cbom.json
 ```
 
-### Scan a specific folder
-
+**Scan a GitHub repository:**
 ```bash
-cbom-js --source ./my-node-app
+npx ts-node src/index.ts --source https://github.com/org/repo --output cbom.json
 ```
 
-### Write output to a specific file
-
+**Scan with CodeQL taint analysis enabled:**
 ```bash
-cbom-js --source ./my-node-app --output ./reports/cbom.json
-```
-
-### Verbose output (show all findings including INFO)
-
-```bash
-cbom-js --source ./my-node-app --verbose
-```
-
-### Fail if any weak algorithms are found (for CI gating)
-
-```bash
-cbom-js --source ./my-node-app --fail-on-weak
-echo "Exit code: $?"   # 1 if weak crypto found, 0 if clean
-```
-
-### Fail if any CRITICAL or HIGH findings exist
-
-```bash
-cbom-js --source ./my-node-app --fail-on-severity HIGH
-```
-
-### Exclude test files and vendor folders
-
-```bash
-cbom-js \
-  --source ./my-node-app \
-  --exclude "**/test/**,**/vendor/**,**/__mocks__/**"
-```
-
----
-
-## Scanning a GitHub Repository
-
-cbom-js clones the repository into a temporary directory, scans it, then cleans up automatically.
-
-### Scan the default branch
-
-```bash
-cbom-js --source https://github.com/juice-shop/juice-shop
-```
-
-### Scan a specific branch
-
-```bash
-cbom-js \
+npx ts-node src/index.ts \
   --source https://github.com/juice-shop/juice-shop \
-  --branch develop
+  --codeql \
+  --codeql-path "C:\tools\codeql\codeql.exe" \
+  --output cbom.json
 ```
 
-### Scan a specific tag or branch by name
+---
+
+## CLI Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--source <path\|url>` | Local directory path or remote Git URL to scan | *(required)* |
+| `--output <file>` | Output file path for the CBOM JSON | `cbom.json` |
+| `--format <format>` | Output format (`cyclonedx`) | `cyclonedx` |
+| `--codeql` | Enable CodeQL taint analysis pass | `false` |
+| `--codeql-path <path>` | Absolute path to the `codeql` / `codeql.exe` binary | `codeql` (must be on PATH) |
+| `--branch <name>` | Git branch to clone for remote sources | default branch |
+| `--verbose` | Print every individual finding to the console | `false` |
+| `--clear-cache` | Delete all cached repositories and CodeQL databases | `false` |
+
+---
+
+## How It Works
+
+### AST Engine
+
+The AST engine runs on every scan. It:
+
+1. Discovers all `.js`, `.ts`, `.jsx`, `.tsx` files using `glob`
+2. Parses each file into an AST using `@typescript-eslint/typescript-estree` with error-tolerant mode
+3. Runs a suite of detectors over each AST:
+
+| Detector | What it finds |
+|----------|--------------|
+| `hardcodedSecrets` | Secret literals assigned to sensitive variable names, insecure RNG (`Math.random`, `Date.now`) |
+| `tlsDetector` | Weak TLS versions, cipher suites, `rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED=0` |
+| `nodeCrypto` | Native `crypto` module calls — `createHash`, `createCipheriv`, etc. |
+| `jwtDetector` | JWT algorithm selections in `jsonwebtoken`, `jose` |
+| `cryptoLibs` | Third-party crypto libraries — `crypto-js`, `bcrypt`, `argon2`, and many more |
+| `registryDetector` | Any library listed in `src/registry/libraries.json` |
+
+All detectors return `CryptoFinding[]`. The orchestrator in `src/detectors/index.ts` aggregates and deduplicates them.
+
+### CodeQL Engine
+
+The CodeQL engine is optional and runs after the AST engine. It performs **taint-flow analysis** — rather than just finding where a weak algorithm is used, it tracks whether that value actually flows into a crypto function. This catches vulnerabilities that span multiple files or variable assignments that the AST engine cannot follow.
+
+When `--codeql` is passed, the tool:
+
+1. **Creates a CodeQL database** for the source directory (JavaScript/TypeScript extractor)
+2. **Generates two QL queries at runtime** from the registry data in `libraries.json`:
+   - `registry-<timestamp>.ql` — tracks hardcoded secrets flowing to any registered crypto sink
+   - `weakalgo-<timestamp>.ql` — tracks weak algorithm names flowing into crypto function arguments
+3. **Runs any static `.ql` files** found in `queries/` alongside the generated ones
+4. **Parses the SARIF output** and converts findings to `CryptoFinding[]` via `bridgeCodeQLResults`
+5. **Merges and deduplicates** CodeQL findings with AST findings
+
+The generated queries are written to `queries/_generated/` (which is gitignored) and cleaned up after each run.
+
+### Result Deduplication
+
+When both engines run, findings are deduplicated by matching on `(algorithm, filePath, line)`. If the AST engine and CodeQL engine both find the same algorithm usage at the same location, only one finding is kept — the one with richer metadata (typically the AST finding, since it includes the actual code snippet).
+
+---
+
+## CodeQL Setup
+
+### Download CodeQL
+
+Download the CodeQL CLI bundle for your platform from the official GitHub release page:
+
+👉 https://github.com/github/codeql-action/releases
+
+Choose the `codeql-bundle-*.tar.gz` (Linux/macOS) or `codeql-bundle-win64.tar.gz` (Windows) asset — **not** the source code zip. The bundle includes the CLI and all language extractors including JavaScript.
+
+Extract it to a permanent location, for example:
+- Windows: `C:\tools\codeql\`
+- macOS/Linux: `~/tools/codeql/`
+
+The binary you need is:
+- Windows: `C:\tools\codeql\codeql.exe`
+- macOS/Linux: `~/tools/codeql/codeql`
+
+> **Important:** Use the full absolute path when passing `--codeql-path`. Do not rely on adding it to PATH for the first run.
+
+### Install Query Pack Dependencies
+
+The generated queries depend on `codeql/javascript-all`. You need to install this dependency **once** before the first CodeQL scan:
 
 ```bash
-cbom-js \
-  --source https://github.com/keycloak/keycloak \
-  --branch main \
-  --output keycloak-cbom.json
+# Navigate to the queries directory
+cd <project-root>/queries
+
+# Run pack install using your CodeQL binary
+# Windows:
+C:\tools\codeql\codeql.exe pack install
+
+# macOS/Linux:
+~/tools/codeql/codeql pack install
 ```
 
-### Scan with .git suffix (also works)
+This creates `queries/codeql-pack.lock.yml` and downloads `codeql/javascript-all` into `~/.codeql/packages/`. You only need to do this once — subsequent runs reuse the cached packages.
+
+Both `queries/qlpack.yml` and `queries/codeql-pack.lock.yml` should be committed to your repository so teammates do not need to run `pack install` themselves.
+
+### Running with CodeQL
 
 ```bash
-cbom-js --source https://github.com/juice-shop/juice-shop.git
-```
-
-### Full example — scan, output, and fail on critical
-
-```bash
-cbom-js \
+# Windows
+npx ts-node src/index.ts \
   --source https://github.com/juice-shop/juice-shop \
-  --branch master \
-  --output ./reports/juiceshop-cbom.json \
-  --fail-on-severity CRITICAL \
-  --verbose
+  --codeql \
+  --codeql-path "C:\tools\codeql\codeql.exe" \
+  --output cbom.json
+
+# macOS/Linux
+npx ts-node src/index.ts \
+  --source https://github.com/juice-shop/juice-shop \
+  --codeql \
+  --codeql-path "$HOME/tools/codeql/codeql" \
+  --output cbom.json
 ```
 
-### Private repositories
+> The first run will be slow (2–5 minutes for a large repo) because it builds the CodeQL database. Subsequent runs reuse the cached database and complete much faster — see [Caching](#caching).
 
-For private repos, ensure your machine has SSH access configured:
+---
+
+## Caching
+
+### Repository Cache
+
+When scanning a remote Git URL, the repository is cloned once and cached at:
+
+```
+~/.cbom-js/cache/<host>__<org>__<repo>/
+```
+
+For example, `https://github.com/juice-shop/juice-shop` is cached at:
+```
+~/.cbom-js/cache/github.com__juice-shop__juice-shop/
+```
+
+On subsequent runs, the cached clone is reused and no network request is made. The cache is keyed by URL and branch, so scanning different branches creates separate cache entries.
+
+If a clone fails midway (network error, disk full), the partial cache directory is automatically deleted so the next run retries from scratch.
+
+### CodeQL Database Cache
+
+CodeQL databases are cached at:
+
+```
+~/.cbom-js/codeql-dbs/<projectName>__<fingerprint>/
+```
+
+The fingerprint is derived from the **git commit SHA** of the source (for git repos) or a **hash of file modification times** (for local paths). This means:
+
+- Same commit → cached database is reused ✅
+- New commit or changed files → new database is built automatically ✅
+- Failed database build → partial directory is deleted, next run retries ✅
+
+### Clearing the Cache
+
+To clear all cached repositories and CodeQL databases:
 
 ```bash
-# Use SSH URL instead of HTTPS
-cbom-js --source git@github.com:your-org/private-repo.git --branch main
+npx ts-node src/index.ts --clear-cache
 ```
 
-Or set up a GitHub token via git credential helper before running.
+Or manually delete:
+```bash
+# All caches
+rm -rf ~/.cbom-js/
 
----
+# Just repository clones
+rm -rf ~/.cbom-js/cache/
 
-## Example Output (Console)
-
-```
- ██████╗██████╗  ██████╗ ███╗   ███╗      ██╗███████╗
-██╔════╝██╔══██╗██╔═══██╗████╗ ████║      ██║██╔════╝
-...
-
-▶ Scan Target:  https://github.com/juice-shop/juice-shop
-▶ Cloning repository...
-▶ Files Found:  147
-
-  ██████████████████████████████ 100% (147/147)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SCAN RESULTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Severity Breakdown:
-    [ CRIT ]    8
-    [ HIGH ]   12
-    [ MED  ]    6
-    [ LOW  ]    0
-    [ INFO ]   11
-
-  Total Crypto Assets:    37
-  Weak Algorithms:        20
-  Quantum Vulnerable:      6
-  Files Scanned:         147
-  Duration:             3241ms
-
-  Findings Detail:
-
-  [ CRIT ] MD5 · node:crypto
-           lib/insecurity.ts:42
-           ↳ CWE-327
-
-  [ CRIT ] HARDCODED-SECRET · source-code
-           lib/insecurity.ts:7
-           ↳ Hardcoded value in variable 'jwtSecret' — use environment variables instead
-           ↳ CWE-321, CWE-798
-
-  [ HIGH ] SHA-1 · node:crypto
-           routes/vulnCodeSnippet.js:89
-           ↳ CWE-327
-...
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✓ CBOM written to: ./juiceshop-cbom.json
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Just CodeQL databases
+rm -rf ~/.cbom-js/codeql-dbs/
 ```
 
 ---
 
-## CBOM Output Format (CycloneDX 1.6)
+## Output Format
 
-The output is a valid [CycloneDX 1.6](https://cyclonedx.org/specification/overview/) CBOM JSON file.
+The output is a **CycloneDX 1.6 CBOM JSON** file. Each cryptographic finding becomes a `cryptoAsset` component with:
 
+- `cryptoProperties` — algorithm primitive, quantum safety level, classical security level, OID
+- `evidence.occurrences` — file path, line number, column offset
+- `properties` — library source, weak flag, severity, CWE IDs, code snippet, detection source (`ast` or `codeql`)
+
+Findings from the CodeQL engine are tagged with `"cbom-js:library": "codeql"` and `"cbom-js:detectionSource": "codeql"` so you can filter them.
+
+Example component (CodeQL finding):
 ```json
 {
-  "bomFormat": "CycloneDX",
-  "specVersion": "1.6",
-  "serialNumber": "urn:uuid:a1b2c3d4-...",
-  "version": 1,
-  "metadata": {
-    "timestamp": "2026-05-19T10:30:00.000Z",
-    "tools": [{ "name": "cbom-js", "version": "1.0.0" }],
-    "component": {
-      "type": "application",
-      "name": "juice-shop"
-    },
-    "properties": [
-      { "name": "cbom-js:filesScanned", "value": "147" },
-      { "name": "cbom-js:totalFindings", "value": "37" },
-      { "name": "cbom-js:criticalFindings", "value": "8" },
-      { "name": "cbom-js:weakAlgorithms", "value": "20" },
-      { "name": "cbom-js:quantumVulnerable", "value": "6" }
-    ]
-  },
-  "components": [
-    {
-      "type": "cryptoAsset",
-      "bom-ref": "crypto:md5:lib/insecurity.ts:42",
-      "name": "MD5",
-      "cryptoProperties": {
-        "assetType": "algorithm",
-        "algorithmProperties": {
-          "primitive": "hash",
-          "executionEnvironment": "software",
-          "implementationPlatform": "node.js",
-          "cryptoFunctions": ["digest"],
-          "nistQuantumSecurityLevel": 1,
-          "classicalSecurityLevel": 0
-        }
-      },
-      "evidence": {
-        "occurrences": [
-          {
-            "location": "lib/insecurity.ts",
-            "line": 42,
-            "symbol": "MD5"
-          }
-        ]
-      },
-      "properties": [
-        { "name": "cbom-js:library", "value": "node:crypto" },
-        { "name": "cbom-js:weak", "value": "true" },
-        { "name": "cbom-js:severity", "value": "CRITICAL" },
-        { "name": "cbom-js:cwe", "value": "CWE-327" },
-        { "name": "cbom-js:codeSnippet", "value": "const hash = crypto.createHash('md5')" }
-      ]
-    }
-  ],
-  "vulnerabilities": [
-    {
-      "id": "CWE-327",
-      "source": {
-        "name": "CWE",
-        "url": "https://cwe.mitre.org/data/definitions/327.html"
-      },
-      "ratings": [{ "severity": "critical", "method": "other" }],
-      "description": "MD5 is a cryptographically broken hash function vulnerable to collision attacks"
-    }
+  "type": "cryptoAsset",
+  "name": "HARDCODED-SECRET",
+  "properties": [
+    { "name": "cbom-js:library",         "value": "codeql" },
+    { "name": "cbom-js:detectionSource", "value": "codeql" },
+    { "name": "cbom-js:severity",        "value": "CRITICAL" },
+    { "name": "cbom-js:cwe",             "value": "CWE-321" },
+    { "name": "cbom-js:notes",           "value": "CodeQL taint path: hardcoded key flows to crypto sink" },
+    { "name": "cbom-js:codeSnippet",     "value": "const hmac = crypto.createHmac('sha256', privateKey)" }
   ]
 }
-```
-
----
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-# .github/workflows/cbom.yml
-name: CBOM Scan
-
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
-
-jobs:
-  cbom-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install cbom-js
-        run: |
-          git clone https://github.com/your-org/cbom-js.git
-          cd cbom-js && npm install && npm run build && npm install -g .
-
-      - name: Run CBOM Scan
-        run: |
-          cbom-js \
-            --source . \
-            --output cbom.json \
-            --fail-on-severity HIGH
-
-      - name: Upload CBOM Artifact
-        uses: actions/upload-artifact@v4
-        if: always()   # upload even on failure
-        with:
-          name: cbom-report
-          path: cbom.json
-          retention-days: 90
-```
-
-### Full security pipeline with Trivy + CBOM
-
-```yaml
-name: Security Pipeline
-
-on: [push, pull_request]
-
-jobs:
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Step 1: Generate SBOM + scan with Trivy
-      - name: Trivy — SBOM + CVE scan
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-          ./bin/trivy fs . \
-            --format cyclonedx \
-            --output sbom.json
-          ./bin/trivy fs . \
-            --format json \
-            --output trivy-report.json \
-            --severity CRITICAL,HIGH \
-            --exit-code 1
-
-      # Step 2: CBOM scan
-      - name: Install cbom-js
-        run: |
-          git clone https://github.com/your-org/cbom-js.git /tmp/cbom-js
-          cd /tmp/cbom-js && npm install && npm run build && npm install -g .
-
-      - name: Generate CBOM
-        run: |
-          cbom-js \
-            --source . \
-            --output cbom.json \
-            --fail-on-severity CRITICAL
-
-      # Step 3: Upload all artifacts
-      - name: Upload Security Artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-reports
-          path: |
-            sbom.json
-            trivy-report.json
-            cbom.json
-```
-
-### GitLab CI
-
-```yaml
-cbom-scan:
-  stage: security
-  image: node:20
-  script:
-    - git clone https://github.com/your-org/cbom-js.git /tmp/cbom-js
-    - cd /tmp/cbom-js && npm install && npm run build && npm install -g .
-    - cd $CI_PROJECT_DIR
-    - cbom-js --source . --output cbom.json --fail-on-severity HIGH
-  artifacts:
-    paths:
-      - cbom.json
-    expire_in: 90 days
-    when: always
-```
-
----
-
-## Scanning Popular Repositories (Quick Start)
-
-Try cbom-js immediately on well-known open source projects:
-
-```bash
-# OWASP Juice Shop — intentionally vulnerable, great for testing
-cbom-js --source https://github.com/juice-shop/juice-shop --output juiceshop-cbom.json
-
-# Express.js
-cbom-js --source https://github.com/expressjs/express --output express-cbom.json
-
-# Keycloak (Java-heavy but has JS frontend)
-cbom-js --source https://github.com/keycloak/keycloak --output keycloak-cbom.json
-
-# Socket.io
-cbom-js --source https://github.com/socketio/socket.io --output socketio-cbom.json
-
-# Next.js
-cbom-js --source https://github.com/vercel/next.js --branch canary --output nextjs-cbom.json
 ```
 
 ---
@@ -495,23 +288,35 @@ cbom-js --source https://github.com/vercel/next.js --branch canary --output next
 ```
 cbom-js/
 ├── src/
-│   ├── index.ts                    ← CLI entry point
-│   ├── types.ts                    ← shared TypeScript interfaces
+│   ├── index.ts                    ← CLI entry point, scan orchestration
+│   ├── types.ts                    ← Shared TypeScript interfaces (CryptoFinding, ScanOptions, etc.)
 │   ├── parser/
-│   │   ├── astParser.ts            ← AST parsing + traversal helpers
-│   │   └── fileScanner.ts          ← directory walker, file finder
+│   │   ├── astParser.ts            ← AST parsing and traversal helpers
+│   │   └── fileScanner.ts          ← Recursive file discovery
 │   ├── detectors/
-│   │   ├── index.ts                ← orchestrates all detectors
-│   │   ├── nodeCrypto.ts           ← node:crypto built-in detection
-│   │   ├── jwtDetector.ts          ← jsonwebtoken / jose detection
-│   │   ├── cryptoLibs.ts           ← crypto-js, bcrypt, forge, etc.
-│   │   ├── tlsDetector.ts          ← TLS/HTTPS config weaknesses
-│   │   └── hardcodedSecrets.ts     ← hardcoded keys, Math.random()
+│   │   ├── index.ts                ← Aggregates all detector results
+│   │   ├── hardcodedSecrets.ts     ← Hardcoded secrets and insecure RNG
+│   │   ├── tlsDetector.ts          ← Weak TLS configuration
+│   │   ├── nodeCrypto.ts           ← Node.js native crypto module
+│   │   ├── jwtDetector.ts          ← JWT algorithm detection
+│   │   ├── cryptoLibs.ts           ← Third-party crypto libraries
+│   │   ├── registryDetector.ts     ← Registry-driven library detection
+│   │   └── codeqlBridge.ts         ← Converts CodeQL SARIF results to CryptoFinding[]
 │   ├── cbom/
-│   │   └── cbomGenerator.ts        ← CycloneDX 1.6 CBOM output
+│   │   └── cbomGenerator.ts        ← Serialises findings to CycloneDX 1.6 JSON
+│   ├── registry/
+│   │   ├── libraries.json          ← Central detection rules and algorithm metadata
+│   │   └── registryLoader.ts       ← Singleton registry loader with lookup helpers
 │   └── utils/
-│       ├── githubSource.ts         ← GitHub clone / local path resolver
-│       └── reporter.ts             ← console output, tables, progress
+│       ├── codeqlRunner.ts         ← CodeQL database creation, query generation, SARIF parsing
+│       ├── githubSource.ts         ← Git clone with persistent cache
+│       ├── reporter.ts             ← Console output (progress bars, tables)
+│       └── detectorHelpers.ts      ← Re-exports AST helpers for detectors
+├── queries/
+│   ├── qlpack.yml                  ← Declares this as a CodeQL pack depending on codeql/javascript-all
+│   ├── codeql-pack.lock.yml        ← Lock file generated by `codeql pack install` (commit this)
+│   ├── codeql-config.yml           ← Optional: paths to exclude from CodeQL extraction
+│   └── _generated/                 ← Runtime-generated .ql files (gitignored)
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -519,120 +324,24 @@ cbom-js/
 
 ---
 
-## How It Works
+## Extending the Tool
 
-### 1. Source Resolution
-If the input is a GitHub URL, the repository is cloned shallowly (`--depth 1`) into a temp directory. Local paths are resolved as-is. Temp directories are cleaned up automatically after the scan.
+**Add a new AST detector:**
+1. Create `src/detectors/<name>.ts` exporting `detect<Name>(ast, filePath, source): CryptoFinding[]`
+2. Register it in `src/detectors/index.ts`
 
-### 2. File Discovery
-All `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs` files are collected recursively, excluding `node_modules`, `dist`, `build`, test files, and minified bundles by default.
+**Add detection rules without writing code:**
+Edit `src/registry/libraries.json` — add entries under `packages`, `algorithms`, `hardcodedPatterns`, or `tlsPatterns`. The registry loader picks up changes on the next run automatically.
 
-### 3. AST Parsing
-Each file is parsed into an Abstract Syntax Tree using `@typescript-eslint/typescript-estree`, which handles both JavaScript and TypeScript natively. Malformed files are skipped with a warning.
+**Add a static CodeQL query:**
+Place any `.ql` file in the `queries/` directory. It will be picked up and run alongside the auto-generated queries on every CodeQL scan. The query must import `javascript` and the `qlpack.yml` dependency on `codeql/javascript-all` covers stdlib resolution.
 
-### 4. Detection
-Five detectors run against every file's AST simultaneously:
-- **nodeCrypto** — walks `CallExpression` nodes looking for `crypto.*` calls
-- **jwtDetector** — finds JWT library imports and extracts algorithm values
-- **cryptoLibs** — recognizes 15+ crypto library import patterns
-- **tlsDetector** — checks `Property` nodes for TLS config keys
-- **hardcodedSecrets** — matches variable names against secret patterns
-
-### 5. CBOM Generation
-Findings are mapped to the [CycloneDX 1.6 `cryptoAsset` component type](https://cyclonedx.org/specification/overview/), with primitive classification, OID mapping, quantum safety level, CWE references, and code location evidence.
-
----
-
-## Extending cbom-js
-
-### Adding a new detector
-
-Create `src/detectors/myLibrary.ts`:
-
-```typescript
-import { TSESTree } from '@typescript-eslint/typescript-estree';
-import { CryptoFinding } from '../types';
-import { traverseAST, getStringValue, getSnippet, isMemberCall } from '../parser/astParser';
-
-export function detectMyLibrary(
-  ast: TSESTree.Program,
-  filePath: string,
-  source: string
-): CryptoFinding[] {
-  const findings: CryptoFinding[] = [];
-
-  traverseAST(ast, {
-    CallExpression(node) {
-      if (isMemberCall(node, 'myLib', 'encrypt')) {
-        const algo = getStringValue(node.arguments[0]);
-        if (algo) {
-          findings.push({
-            algorithm: algo.toUpperCase(),
-            library: 'my-library',
-            location: filePath,
-            line: node.loc?.start.line || 0,
-            weak: false,
-            quantumSafe: true,
-            severity: 'INFO',
-            context: getSnippet(source, node.loc?.start.line || 0),
-            cwe: []
-          });
-        }
-      }
-    }
-  });
-
-  return findings;
-}
-```
-
-Then register it in `src/detectors/index.ts`:
-
-```typescript
-import { detectMyLibrary } from './myLibrary';
-
-const detectors = [
-  // ... existing detectors
-  { name: 'my-library', fn: detectMyLibrary }
-];
+**Exclude paths from CodeQL analysis:**
+Edit `queries/codeql-config.yml`:
+```yaml
+paths-ignore:
+  - frontend/src/assets/private   # vendored libraries
+  - data/static/codefixes         # intentionally broken fixture files
 ```
 
 ---
-
-## Limitations
-
-- **JS/TS only** — no Java, Python, Go, C/C++ support (by design for now)
-- **Static analysis only** — cannot detect runtime-constructed algorithm strings like `crypto.createHash(getUserInput())`
-- **Import aliasing** — heavily aliased imports may be missed if the alias doesn't match known patterns
-- **Minified code** — excluded by default; if included, findings will be less readable
-- **Transitive dependencies** — scans source code only, not `node_modules`. Use Trivy/Grype for dependency CVE scanning alongside this tool
-
----
-
-## Roadmap
-
-- [ ] SPDX output format support
-- [ ] `--format sarif` output for GitHub Code Scanning integration
-- [ ] Dependency Track upload (`--upload-to <url>`)
-- [ ] Config file support (`.cbomrc.json`)
-- [ ] Detect `SubtleCrypto` (Web Crypto API) usage in browser-targeted code
-- [ ] Detect Webpack/Vite crypto plugin configurations
-- [ ] VS Code extension for inline findings
-
----
-
-## License
-
-Apache 2.0 — see [LICENSE](./LICENSE)
-
----
-
-## Related Tools
-
-| Tool | Purpose | Relationship to cbom-js |
-|---|---|---|
-| [Trivy](https://github.com/aquasecurity/trivy) | CVE + SBOM scanning | Complementary — use for dependency CVEs |
-| [IBM CBOMkit](https://github.com/IBM/cbomkit) | Full CBOM platform (Java/Python) | cbom-js fills the JS/TS gap CBOMkit doesn't cover |
-| [Syft](https://github.com/anchore/syft) | SBOM generation | SBOM complement — use Syft for library inventory, cbom-js for crypto inventory |
-| [Dependency Track](https://dependencytrack.org/) | Continuous SBOM/CBOM monitoring | Feed cbom-js output into Dependency Track for continuous monitoring |
-| [Semgrep](https://semgrep.dev/) | SAST with crypto rules | Alternative/complement — Semgrep finds findings, cbom-js produces structured CBOM |
