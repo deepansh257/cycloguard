@@ -78,5 +78,7 @@ runs:
           '{scan_prefix:$scan_prefix,reports:{node:($node[0]//{}),java:($java[0]//{}),python:($python[0]//{}),filesystem:($fs[0]//{})}}' \
           > "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-merged.json"
 
-        cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-merged.json" "${{ inputs.report-dir }}/trivy-merged.json"
-        cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" "${{ inputs.report-dir }}/trivy-results.sarif" || true
+        if [[ "${{ inputs.scan-prefix }}" != "trivy" ]]; then
+          cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-merged.json" "${{ inputs.report-dir }}/trivy-merged.json"
+          cp "${{ inputs.report-dir }}/${{ inputs.scan-prefix }}-results.sarif" "${{ inputs.report-dir }}/trivy-results.sarif" || true
+        fi
