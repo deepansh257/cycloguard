@@ -4,10 +4,11 @@ import * as path from 'path';
 import { ScanOptions, ScanResult } from './types';
 import { findFiles, readFile, getRelativePath } from './parser/fileScanner';
 import { parseSource } from './parser/astParser';
-import { runAllDetectors } from './detectors/index';
+import { runAllDetectors, runCodeQLPass } from './detectors/index';   // ← add runCodeQLPass
 import { generateCBOM } from './cbom/cbomGenerator';
 import { buildSummary, printBanner, printScanStart, printProgress, printScanComplete, printFindings, printOutput } from './utils/reporter';
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
+import { CryptoFinding } from './types';
 
 const program = new Command();
 
@@ -23,25 +24,33 @@ program
   .option('-v, --verbose', 'Print all findings including INFO level', false)
   .option('--exclude <patterns>', 'Comma-separated glob patterns to exclude', '')
   .option('--include <patterns>', 'Comma-separated glob patterns to include', '')
+  // ── NEW ──────────────────────────────────────────────────────────────────────
+  .option('--codeql',             'Run CodeQL taint analysis after AST scan (requires codeql CLI)')
+  .option('--codeql-path <path>', 'Path to codeql binary (default: codeql on PATH)')
+  // ─────────────────────────────────────────────────────────────────────────────
   .action(async (opts) => {
     printBanner();
 
     const options: ScanOptions = {
-      source: opts.source,
-      output: opts.output,
-      format: 'cyclonedx',
-      failOnWeak: opts.failOnWeak,
-      failOnSeverity: opts.failOnSeverity?.toUpperCase(),
-      verbose: opts.verbose,
-      branch: opts.branch,
-      exclude: opts.exclude ? opts.exclude.split(',').map((s: string) => s.trim()) : [],
-      include: opts.include ? opts.include.split(',').map((s: string) => s.trim()) : []
+      source:          opts.source,
+      output:          opts.output,
+      format:          'cyclonedx',
+      failOnWeak:      opts.failOnWeak,
+      failOnSeverity:  opts.failOnSeverity?.toUpperCase(),
+      verbose:         opts.verbose,
+      branch:          opts.branch,
+      exclude:         opts.exclude ? opts.exclude.split(',').map((s: string) => s.trim()) : [],
+      include:         opts.include ? opts.include.split(',').map((s: string) => s.trim()) : [],
+      // ── NEW ────────────────────────────────────────────────────────────────
+      useCodeQL:       opts.codeql   ?? false,
+      codeqlPath:      opts.codeqlPath ?? undefined,
+      // ───────────────────────────────────────────────────────────────────────
     };
 
     let sourceResult;
     const startTime = Date.now();
 
-    // ── Step 1: Resolve source (local or GitHub) ──────────────────────────────
+    // ── Step 1: Resolve source ────────────────────────────────────────────────
     try {
       if (isGitHubUrl(options.source)) {
         console.log(`  Cloning repository: ${options.source}`);
@@ -80,8 +89,8 @@ program
 
     printScanStart(options.source, files.length);
 
-    // ── Step 3: Parse + detect ────────────────────────────────────────────────
-    const allFindings: ReturnType<typeof runAllDetectors>['findings'] = [];
+    // ── Step 3: Parse + detect (AST) ─────────────────────────────────────────
+    const allFindings: CryptoFinding[] = [];
     const allErrors: string[] = [];
     let filesScanned = 0;
 
@@ -105,42 +114,53 @@ program
       allErrors.push(...errors);
     }
 
+    // ── Step 3b: CodeQL taint pass (optional) ─────────────────────────────────
+    // Runs once over the whole source root after all AST work is done.
+    // Deduplicates against AST findings automatically.
+    if (options.useCodeQL) {
+      console.log('\n  Running CodeQL taint analysis…');
+      try {
+        const withCodeQL = await runCodeQLPass(localPath, allFindings, options);
+        const newCount   = withCodeQL.length - allFindings.length;
+        allFindings.length = 0;
+        allFindings.push(...withCodeQL);
+        console.log(`  CodeQL complete — ${newCount} additional finding(s) from taint analysis\n`);
+      } catch (err: any) {
+        console.warn(`  WARNING: CodeQL skipped — ${err.message}\n`);
+      }
+    }
+
     // ── Step 4: Build summary ─────────────────────────────────────────────────
     const duration = Date.now() - startTime;
-    const summary = buildSummary(allFindings);
+    const summary  = buildSummary(allFindings);
 
     const scanResult: ScanResult = {
-      findings: allFindings,
+      findings:    allFindings,
       filesScanned,
       duration,
       projectName,
       projectPath: localPath,
-      summary
+      summary,
     };
 
-    // ── Step 5: Print results to console ──────────────────────────────────────
+    // ── Step 5: Print results ─────────────────────────────────────────────────
     printScanComplete(scanResult);
     printFindings(allFindings, options.verbose);
 
-    // Print parse/detector errors if verbose
     if (options.verbose && allErrors.length > 0) {
       console.log(`  Warnings (${allErrors.length}):`);
       allErrors.slice(0, 10).forEach(e => console.log(`    - ${e}`));
-      if (allErrors.length > 10) {
-        console.log(`    ... and ${allErrors.length - 10} more`);
-      }
+      if (allErrors.length > 10) console.log(`    ... and ${allErrors.length - 10} more`);
       console.log('');
     }
 
-    // ── Step 6: Write CBOM output ─────────────────────────────────────────────
-    const cbom = generateCBOM(scanResult);
+    // ── Step 6: Write CBOM ────────────────────────────────────────────────────
+    const cbom       = generateCBOM(scanResult);
     const outputPath = path.resolve(options.output);
 
     try {
       const outputDir = path.dirname(outputPath);
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
+      if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
       fs.writeFileSync(outputPath, JSON.stringify(cbom, null, 2), 'utf-8');
       printOutput(outputPath);
     } catch (err: any) {
@@ -149,10 +169,10 @@ program
       process.exit(1);
     }
 
-    // ── Step 7: Cleanup temp clone ────────────────────────────────────────────
+    // ── Step 7: Cleanup ───────────────────────────────────────────────────────
     cleanup();
 
-    // ── Step 8: Exit code logic ───────────────────────────────────────────────
+    // ── Step 8: Exit codes ────────────────────────────────────────────────────
     if (options.failOnWeak && summary.weak > 0) {
       console.error(`  FAIL: ${summary.weak} weak algorithm(s) found. Exiting with code 1.\n`);
       process.exit(1);
@@ -163,9 +183,9 @@ program
       const threshold = severityOrder.indexOf(options.failOnSeverity);
       const hasAboveThreshold =
         (threshold <= severityOrder.indexOf('CRITICAL') && summary.critical > 0) ||
-        (threshold <= severityOrder.indexOf('HIGH') && summary.high > 0) ||
-        (threshold <= severityOrder.indexOf('MEDIUM') && summary.medium > 0) ||
-        (threshold <= severityOrder.indexOf('LOW') && summary.low > 0);
+        (threshold <= severityOrder.indexOf('HIGH')     && summary.high     > 0) ||
+        (threshold <= severityOrder.indexOf('MEDIUM')   && summary.medium   > 0) ||
+        (threshold <= severityOrder.indexOf('LOW')      && summary.low      > 0);
 
       if (hasAboveThreshold) {
         console.error(`  FAIL: Findings at or above ${options.failOnSeverity} severity detected. Exiting with code 1.\n`);

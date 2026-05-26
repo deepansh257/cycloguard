@@ -12,6 +12,8 @@ export interface CryptoFinding {
   context?: string; // surrounding code snippet
   cwe?: string[];
   notes?: string;
+  detectionSource?: 'ast' | 'codeql';
+  taintPath?: string[];
 }
 
 export interface ScanOptions {
@@ -24,6 +26,8 @@ export interface ScanOptions {
   include?: string[];       // file patterns to include
   exclude?: string[];       // file patterns to exclude
   branch?: string;          // git branch if using github url
+  useCodeQL?: boolean;
+  codeqlPath?: string;      // path to codeql binary, defaults to 'codeql' on PATH
 }
 
 export interface ScanResult {
