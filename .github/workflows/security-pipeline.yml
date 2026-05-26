@@ -162,6 +162,39 @@ jobs:
           path: ${{ env.REPORT_DIR }}
           if-no-files-found: error
 
+      - name: Upload Trivy Node report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-node-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.REPORT_DIR }}/trivy-node.json
+            ${{ env.REPORT_DIR }}/sbom/node/cyclonedx.json
+            ${{ env.REPORT_DIR }}/sbom/node/spdx.json
+          if-no-files-found: warn
+
+      - name: Upload Trivy Java report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-java-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.REPORT_DIR }}/trivy-java.json
+            ${{ env.REPORT_DIR }}/sbom/java/cyclonedx.json
+            ${{ env.REPORT_DIR }}/sbom/java/spdx.json
+          if-no-files-found: warn
+
+      - name: Upload Trivy Python report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-python-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.REPORT_DIR }}/trivy-python.json
+            ${{ env.REPORT_DIR }}/sbom/python/cyclonedx.json
+            ${{ env.REPORT_DIR }}/sbom/python/spdx.json
+          if-no-files-found: warn
+
       - name: Slack notification
         # Temporarily disabled: SBOM-only rollout
         if: false
