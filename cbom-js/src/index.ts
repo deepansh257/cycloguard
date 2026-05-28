@@ -149,7 +149,6 @@ program
           }
         }
       } else {
-        // ── JS/TS branch (original code, unchanged) ──────────────────────────
         const parsed = parseSource(filePath, source);
         if (!parsed.ast) {
           if (options.verbose && parsed.error) {

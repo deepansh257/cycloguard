@@ -1,8 +1,3 @@
-// src/detectors/registryDetector.ts
-// Generic detector driven entirely by libraries.json.
-// Replaces nodeCrypto.ts, cryptoLibs.ts, jwtDetector.ts
-// New library? Add it to libraries.json — zero code changes needed here.
-
 import { TSESTree } from '@typescript-eslint/typescript-estree';
 import { CryptoFinding } from '../types';
 import {
@@ -46,7 +41,6 @@ export function detectFromRegistry(
           aliasMap.set(spec.local.name, resolvedPkg);
         }
         if (spec.type === 'ImportSpecifier') {
-          // import { createHash } from 'crypto' → track 'createHash' directly
           aliasMap.set(spec.local.name, resolvedPkg);
         }
       });
@@ -69,7 +63,6 @@ export function detectFromRegistry(
         aliasMap.set(node.id.name, resolvedPkg);
       }
 
-      // const { createHash, createHmac } = require('crypto')
       if (node.id.type === 'ObjectPattern') {
         node.id.properties.forEach(prop => {
           if (prop.type === 'Property' && prop.value.type === 'Identifier') {
@@ -184,8 +177,6 @@ function matchMemberCall(
 
   return buildFinding(algo, pkgName, rule, filePath, line, col, snippet, node);
 }
-
-// alias.METHOD.encrypt(...) — e.g. CryptoJS.AES.encrypt(...)
 function matchNestedMemberCall(
   node: TSESTree.CallExpression,
   alias: string,
@@ -210,9 +201,6 @@ function matchNestedMemberCall(
 
   return null;
 }
-
-// alias.a.b.c(...) — e.g. forge.pki.rsa.generateKeyPair(...)
-// methodName is dot-separated: 'pki.rsa.generateKeyPair'
 function matchDeepMemberCall(
   node: TSESTree.CallExpression,
   alias: string,
@@ -228,13 +216,11 @@ function matchDeepMemberCall(
   if (node.callee.type !== 'MemberExpression') return null;
   const callee = node.callee;
 
-  // Check final method name
   if (
     callee.property.type !== 'Identifier' ||
     callee.property.name !== lastMethod
   ) return null;
 
-  // Build expected call chain from the callee object
   const callChain = extractMemberChain(callee.object);
   const expected = [alias, ...chain].join('.');
 
@@ -246,7 +232,6 @@ function matchDeepMemberCall(
   return buildFinding(algo, pkgName, rule, filePath, line, col, snippet, node);
 }
 
-// directCall — e.g. md5(data) where md5 was imported as default
 function matchDirectCall(
   node: TSESTree.CallExpression,
   alias: string,
@@ -265,7 +250,6 @@ function matchDirectCall(
   return null;
 }
 
-// importedFunction — e.g. import { sha256 } from '@noble/hashes/sha256'; sha256(data)
 function matchImportedFunction(
   node: TSESTree.CallExpression,
   alias: string,
@@ -291,26 +275,23 @@ function resolveAlgorithm(
   rule: MethodRule,
   node: TSESTree.CallExpression | TSESTree.NewExpression
 ): string | null {
-  // Fixed algorithm — no need to inspect args
   if (rule.fixedAlgorithm) {
     const prefix = rule.algoPrefix || '';
     return prefix + rule.fixedAlgorithm;
   }
 
-  // Algorithm comes from a positional argument
   if (rule.algoArgIndex !== undefined && args[rule.algoArgIndex]) {
     const raw = getStringValue(args[rule.algoArgIndex] as TSESTree.Node);
     if (raw) {
       const prefix = rule.algoPrefix || '';
       const algo = (prefix + raw).toUpperCase();
 
-      // Parse AES-128-CBC → base algo + mode + keySize
       if (rule.parseAlgoMode) {
-        return algo; // return as-is, analyzer will parse mode
+        return algo; 
       }
       return algo;
     }
-    // Argument present but not a static string — we can't resolve it statically
+
     return `DYNAMIC-ALGO`;
   }
 
@@ -329,13 +310,10 @@ function resolveAlgorithm(
         if (val) return val.toUpperCase();
       }
     }
-    // Fall back to default
+
     return rule.defaultAlgorithm?.toUpperCase() || null;
   }
-
-  // Default algorithm
   if (rule.defaultAlgorithm) return rule.defaultAlgorithm.toUpperCase();
-
   return null;
 }
 
