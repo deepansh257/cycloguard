@@ -1,6 +1,6 @@
 # CycloGuard SBOM Scanner
 
-CycloGuard SBOM now works as a repo-driven scanner.
+CycloGuard SBOM is a repo-driven, local-first SBOM + Trivy scanner.
 
 ## What this builds
 A local-first security scanner that accepts any GitHub repository URL (or local path), auto-detects tech stack, generates SBOM, runs Trivy, and saves artifacts.
@@ -80,10 +80,22 @@ Inside `--output` folder:
 - `trivy-merged.json`
 - `gate-result.json`
 
-## Key files
-- `sbom/src/index.ts` - main local CLI pipeline
-- `sbom/scripts/parse_trivy_report.js` - gate parsing
-- `.github/workflows/security-pipeline.yml` - CI wrapper pipeline
+## Source code structure (`sbom/src`)
+- `index.ts`: thin orchestrator entrypoint
+- `types.ts`: shared types
+- `cli/args.ts`: CLI argument parsing
+- `core/fs.ts`, `core/shell.ts`: shared file/shell utilities
+- `source/acquire.ts`: clone/pull cache and source resolution
+- `detectors/projects.ts`: auto-detection and language grouping
+- `scanner/pipeline.ts`: SBOM generation + Trivy scan + merge
+- `reports/gate.ts`: gate result generation
+- `tools/bootstrap.ts`: tool checks + auto-install bootstrap
+
+## CI workflow
+- `.github/workflows/security-pipeline.yml`
+  - wraps the same scanner flow for CI
+  - supports workflow dispatch inputs (`source_repo`, `source_branch`, `threshold`)
+  - uploads full and per-language artifacts
 
 ## Note
 The old committed vulnerable sample applications under `sbom/apps/` were removed per updated approach. Scanning target is now always user-provided source repo/path.
