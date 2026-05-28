@@ -1,76 +1,89 @@
-# CycloGuard SBOM Security Pipeline
+# CycloGuard SBOM Scanner
 
-## What We Are Building
-CycloGuard is a multi-language software supply chain security pipeline that:
-- generates SBOMs (Software Bill of Materials),
-- scans dependencies with Trivy,
-- enforces vulnerability gates,
-- and later automates issue creation, notifications, and AI-assisted remediation.
+CycloGuard SBOM now works as a repo-driven scanner.
 
-The current target stacks are:
-- Node.js: `sbom/apps/vuln_node.js`
-- Java/Gradle: `sbom/apps/vuln_java`
-- Python: `sbom/apps/vuln_python`
+## What this builds
+A local-first security scanner that accepts any GitHub repository URL (or local path), auto-detects tech stack, generates SBOM, runs Trivy, and saves artifacts.
 
-## Why This Is Needed
-Modern applications depend on many third-party packages. Without automated SBOM + scanning:
-- vulnerable dependencies are hard to track across releases,
-- security checks become inconsistent across languages,
-- audit/compliance evidence is difficult to produce.
+Supported stacks:
+- Node.js
+- Java (Maven/Gradle)
+- Python
+- C# (.NET)
+- React (auto-detected under Node.js)
+- Angular (auto-detected under Node.js)
 
-This project creates one repeatable workflow for all three ecosystems so teams can detect and track risk early in CI.
+## Why this is needed
+- No hardcoded sample apps needed in repo.
+- Same flow can run against any target repository.
+- Faster iteration locally (no need to push every change to test).
+- Standardized SBOM + Trivy outputs for auditing and gates.
 
-## Phase 1 Scope (Completed)
-Phase 1 focused on SBOM + Trivy foundation and report outputs.
+## Core behavior
+1. User provides `--source` (`https://github.com/org/repo` or local path).
+2. For GitHub URL:
+   - First run: clone to temp/cache location.
+   - Next runs: skip re-clone, do `git fetch/pull`.
+3. Auto-detect project type(s) from repo contents.
+4. If one stack detected: run only that stack.
+5. If multiple stacks detected: run all detected stacks.
+6. Generate separate Trivy reports per detected stack + merged report + gate summary.
+7. Save all artifacts under provided output folder.
 
-Implemented:
-1. Monorepo-aligned pipeline in GitHub Actions.
-2. SBOM generation for Node/Java/Python in the same run.
-3. Trivy scanning of generated SBOMs.
-4. Gate parsing logic from Trivy outputs (`high` / `critical` threshold based).
-5. Artifact publishing for:
-   - consolidated report bundle,
-   - separate language-specific Trivy artifacts (node/java/python).
+## Local usage
+Install once:
+```bash
+cd sbom
+npm install
+```
 
-## Current Pipeline Flow
-1. Trigger on push/PR/workflow_dispatch.
-2. Setup runtimes and tools.
-3. Generate SBOMs:
-   - CycloneDX JSON per language
-   - SPDX file placeholder per language (currently copied from CycloneDX output)
-4. Run Trivy scans on generated SBOM files.
-5. Parse Trivy output and compute gate result.
-6. Upload artifacts.
+Scan GitHub repo:
+```bash
+npx ts-node src/index.ts --source https://github.com/org/repo --branch main --output ./runs/repo-scan
+```
 
-Note: GitHub issue creation, Slack notifications, and AI fix/re-scan stages are scaffolded but intentionally disabled for current rollout.
+Scan local path:
+```bash
+npx ts-node src/index.ts --source ../some-project --output ./runs/local-scan
+```
 
-## Key Files
-- Workflow: `.github/workflows/security-pipeline.yml`
-- SBOM action: `sbom/.github/actions/generate-sbom/action.yml`
-- Trivy action: `sbom/.github/actions/run-trivy/action.yml`
-- Config: `sbom/security-pipeline-config.yml`
-- Gate parser: `sbom/scripts/parse_trivy_report.js`
+Optional flags:
+- `--threshold high|critical` (default: `high`)
+- `--fs-scan true|false` (default: `true`)
+- `--secret-scan true|false` (default: `false`)
+- `--misconfig-scan true|false` (default: `false`)
+- `--workdir <path>` (custom persistent clone cache location)
 
-Optional/scaffolded (later phases):
-- `sbom/.github/actions/ai-fix/action.yml`
-- `sbom/.github/actions/slack-notify/action.yml`
-- `sbom/scripts/create_github_issue.js`
-- `sbom/scripts/manage_reports.js`
-- `sbom/scripts/build_slack_payload.js`
+Output isolation behavior:
+- Scanner now creates a source-specific subfolder under `--output` automatically.
+- Pattern: `<repo-or-folder-name>__<branch>__<YYYYMMDD-HHMMSS>`
+- Example: `--output ./runs` with Juice Shop `master` creates:
+  - `./runs/juice-shop__master__20260528-184255/`
 
-## Artifacts You Should See
-Per run, artifacts include:
-- `security-reports-<run-id>-<attempt>` (full bundle)
-- `trivy-node-<run-id>-<attempt>`
-- `trivy-java-<run-id>-<attempt>`
-- `trivy-python-<run-id>-<attempt>`
+Auto-detection markers:
+- Node/React/Angular: `package.json` (framework inferred from dependencies)
+- Java: `pom.xml`, `build.gradle`, `build.gradle.kts`
+- Python: `requirements.txt`, `pyproject.toml`
+- C#: `.csproj`, `.sln`
 
-These contain SBOMs and corresponding Trivy reports.
+## Outputs (artifacts)
+Inside `--output` folder:
+- `detected-projects.json`
+- `sbom/<lang>/*-cyclonedx.json`
+- `<lang>-<project-id>-trivy.json` (per detected project)
+- `trivy-node.json`
+- `trivy-java.json`
+- `trivy-python.json`
+- `trivy-csharp.json`
+- `trivy-fs.json`
+- `trivy-results.sarif`
+- `trivy-merged.json`
+- `gate-result.json`
 
-## What Comes Next (Phase 2+)
-Planned additions:
-1. Re-enable gate enforcement as a strict CI blocker.
-2. Auto-create GitHub issues for High/Critical findings.
-3. Slack notifications with severity summaries and report links.
-4. AI-assisted dependency remediation + validation re-scan loop.
-5. Report history/audit indexing for release tracking.
+## Key files
+- `sbom/src/index.ts` - main local CLI pipeline
+- `sbom/scripts/parse_trivy_report.js` - gate parsing
+- `.github/workflows/security-pipeline.yml` - CI wrapper pipeline
+
+## Note
+The old committed vulnerable sample applications under `sbom/apps/` were removed per updated approach. Scanning target is now always user-provided source repo/path.

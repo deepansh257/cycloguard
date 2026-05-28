@@ -43,8 +43,9 @@ const mergedPath = path.join(reportDir, 'trivy-merged.json');
 const data = JSON.parse(fs.readFileSync(mergedPath, 'utf8'));
 
 let allVulns = [];
-for (const app of ['node', 'java', 'python', 'filesystem']) {
-  const report = (((data || {}).reports || {})[app]) || {};
+const reports = ((data || {}).reports || {});
+for (const app of Object.keys(reports)) {
+  const report = reports[app] || {};
   allVulns = allVulns.concat(flattenVulns(report, app));
 }
 

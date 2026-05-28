@@ -3,3 +3,7 @@ sbom/apps/vuln_java/bin
 sbom/apps/vuln_node.js/bin
 __pycache__/
 sbom/context/
+node_modules/
+dist/
+sbom-output/
+runs/
