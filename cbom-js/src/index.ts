@@ -10,11 +10,23 @@ import { buildSummary, printBanner, printScanStart, printProgress, printScanComp
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
 import { CryptoFinding } from './types';
 
+// ── Java support ──────────────────────────────────────────────────────────────
+import { parseJavaSource } from './parser/javaParser';
+import { detectJava }      from './detectors/java/javaDetector';
+
+const JAVA_EXTENSIONS = ['.java'];
+
+function isJavaFile(filePath: string): boolean {
+  return JAVA_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const program = new Command();
 
 program
   .name('cbom-js')
-  .description('CBOM generator for JavaScript / TypeScript / Node.js projects')
+  .description('CBOM generator for JavaScript / TypeScript / Node.js / Java projects')
   .version('1.0.0')
   .requiredOption('-s, --source <path-or-url>', 'Local directory path or GitHub URL to scan')
   .option('-o, --output <file>', 'Output file path for the CBOM JSON', 'cbom.json')
@@ -26,6 +38,7 @@ program
   .option('--include <patterns>', 'Comma-separated glob patterns to include', '')
   .option('--codeql',             'Run CodeQL taint analysis after AST scan (requires codeql CLI)')
   .option('--codeql-path <path>', 'Path to codeql binary (default: codeql on PATH)')
+  .option('--lang <languages>',   'Comma-separated list of languages to scan: js,java (default: auto-detect)', '')
   .action(async (opts) => {
     printBanner();
 
@@ -42,6 +55,14 @@ program
       useCodeQL:       opts.codeql   ?? false,
       codeqlPath:      opts.codeqlPath ?? undefined,
     };
+
+    // Parse --lang flag.  Empty = auto-detect (scan both JS and Java files).
+    const langFilter: Set<string> = opts.lang
+      ? new Set(opts.lang.split(',').map((l: string) => l.trim().toLowerCase()))
+      : new Set(); // empty = no filter = scan everything
+
+    const scanJs   = langFilter.size === 0 || langFilter.has('js') || langFilter.has('ts');
+    const scanJava = langFilter.size === 0 || langFilter.has('java');
 
     let sourceResult;
     const startTime = Date.now();
@@ -63,12 +84,21 @@ program
 
     const { localPath, projectName, cleanup } = sourceResult;
 
-    // ── Step 2: Discover files ────────────────────────────────────────────────
+    // ── Step 2: Discover files ─────────────────────────────────────────────────
+    // Build include globs based on which languages are active.
+    const defaultIncludes: string[] = [
+      ...(scanJs   ? ['**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx', '**/*.mjs', '**/*.cjs'] : []),
+      ...(scanJava ? ['**/*.java'] : []),
+    ];
+
+    const includeGlobs =
+      options.include?.length ? options.include : defaultIncludes;
+
     let files: string[];
     try {
       files = await findFiles(
         localPath,
-        options.include?.length ? options.include : undefined,
+        includeGlobs,
         options.exclude?.length ? options.exclude : undefined
       );
     } catch (err: any) {
@@ -78,17 +108,27 @@ program
     }
 
     if (files.length === 0) {
-      console.error('  ERROR: No JS/TS files found in the specified source.');
+      console.error('  ERROR: No supported source files found in the specified source.');
       cleanup();
       process.exit(1);
     }
 
+    // Separate JS and Java file lists for reporting clarity
+    const javaFiles = files.filter(isJavaFile);
+    const jsFiles   = files.filter(f => !isJavaFile(f));
+
+    if (options.verbose) {
+      if (jsFiles.length)   console.log(`  JS/TS files found : ${jsFiles.length}`);
+      if (javaFiles.length) console.log(`  Java files found  : ${javaFiles.length}`);
+      console.log('');
+    }
+
     printScanStart(options.source, files.length);
 
-    // ── Step 3: Parse + detect (AST) ─────────────────────────────────────────
+    // ── Step 3: Parse + detect ────────────────────────────────────────────────
     const allFindings: CryptoFinding[] = [];
-    const allErrors: string[] = [];
-    let filesScanned = 0;
+    const allErrors:   string[]        = [];
+    let   filesScanned                 = 0;
 
     for (const filePath of files) {
       filesScanned++;
@@ -97,32 +137,48 @@ program
       const source = readFile(filePath);
       if (!source) continue;
 
-      const parsed = parseSource(filePath, source);
-      if (!parsed.ast) {
-        if (options.verbose && parsed.error) {
-          allErrors.push(`Parse error in ${filePath}: ${parsed.error}`);
+      if (isJavaFile(filePath)) {
+        // ── Java branch ──────────────────────────────────────────────────────
+        try {
+          const javaAst  = parseJavaSource(filePath, source);
+          const findings = detectJava(javaAst, filePath, source);
+          allFindings.push(...findings);
+        } catch (err: any) {
+          if (options.verbose) {
+            allErrors.push(`Java parse error in ${filePath}: ${err.message}`);
+          }
         }
-        continue;
-      }
+      } else {
+        // ── JS/TS branch (original code, unchanged) ──────────────────────────
+        const parsed = parseSource(filePath, source);
+        if (!parsed.ast) {
+          if (options.verbose && parsed.error) {
+            allErrors.push(`Parse error in ${filePath}: ${parsed.error}`);
+          }
+          continue;
+        }
 
-      const { findings, errors } = runAllDetectors(parsed.ast, filePath, source);
-      allFindings.push(...findings);
-      allErrors.push(...errors);
+        const { findings, errors } = runAllDetectors(parsed.ast, filePath, source);
+        allFindings.push(...findings);
+        allErrors.push(...errors);
+      }
     }
 
-    // ── Step 3b: CodeQL taint pass (optional) ─────────────────────────────────
-    // Runs once over the whole source root after all AST work is done.
-    // Deduplicates against AST findings automatically.
+    // ── Step 3b: CodeQL taint pass (JS/TS only — optional) ───────────────────
     if (options.useCodeQL) {
-      console.log('\n  Running CodeQL taint analysis…');
-      try {
-        const withCodeQL = await runCodeQLPass(localPath, allFindings, options);
-        const newCount   = withCodeQL.length - allFindings.length;
-        allFindings.length = 0;
-        allFindings.push(...withCodeQL);
-        console.log(`  CodeQL complete — ${newCount} additional finding(s) from taint analysis\n`);
-      } catch (err: any) {
-        console.warn(`  WARNING: CodeQL skipped — ${err.message}\n`);
+      if (jsFiles.length === 0) {
+        console.log('\n  CodeQL skipped — no JS/TS files in this scan.\n');
+      } else {
+        console.log('\n  Running CodeQL taint analysis…');
+        try {
+          const withCodeQL = await runCodeQLPass(localPath, allFindings, options);
+          const newCount   = withCodeQL.length - allFindings.length;
+          allFindings.length = 0;
+          allFindings.push(...withCodeQL);
+          console.log(`  CodeQL complete — ${newCount} additional finding(s) from taint analysis\n`);
+        } catch (err: any) {
+          console.warn(`  WARNING: CodeQL skipped — ${err.message}\n`);
+        }
       }
     }
 

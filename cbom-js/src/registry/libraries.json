@@ -892,6 +892,45 @@
           "notes": "HTTP Strict Transport Security"
         }
       }
+    },
+    "javax.crypto": {
+      "language": "java",
+      "aliases": [],
+      "methods": [
+        { "name": "Cipher.getInstance",           "detection": "staticCall" },
+        { "name": "KeyGenerator.getInstance",      "detection": "staticCall" },
+        { "name": "Mac.getInstance",               "detection": "staticCall" },
+        { "name": "SecretKeyFactory.getInstance",  "detection": "staticCall" }
+      ]
+    },
+    "java.security": {
+      "language": "java",
+      "aliases": [],
+      "methods": [
+        { "name": "MessageDigest.getInstance",     "detection": "staticCall" },
+        { "name": "Signature.getInstance",         "detection": "staticCall" },
+        { "name": "KeyPairGenerator.getInstance",  "detection": "staticCall" }
+      ]
+    },
+    "javax.net.ssl": {
+      "language": "java",
+      "aliases": [],
+      "methods": [
+        { "name": "SSLContext.getInstance",        "detection": "staticCall" }
+      ]
+    },
+    "org.bouncycastle": {
+      "language": "java",
+      "aliases": ["bc", "bouncycastle"],
+      "methods": []
+    },
+    "org.springframework.security.crypto": {
+      "language": "java",
+      "aliases": ["spring-security-crypto"],
+      "methods": [
+        { "name": "BCryptPasswordEncoder", "detection": "newExpression" },
+        { "name": "SCryptPasswordEncoder", "detection": "newExpression" }
+      ]
     }
   },
 
