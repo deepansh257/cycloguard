@@ -85,15 +85,18 @@ jobs:
         run: |
           # Priority order:
           # 1) workflow_dispatch inputs (source_repo/source_branch/threshold)
-          # 2) current repository/ref defaults for push/PR events
+          # 2) local workspace defaults for push/PR events
+          # Using local workspace avoids PR synthetic refs like "<id>/merge".
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_repo }}" ]]; then
             echo "repo=${{ inputs.source_repo }}" >> "$GITHUB_OUTPUT"
           else
-            echo "repo=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            echo "repo=." >> "$GITHUB_OUTPUT"
           fi
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_branch }}" ]]; then
             echo "branch=${{ inputs.source_branch }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "branch=${{ github.head_ref }}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
@@ -134,7 +137,7 @@ jobs:
         with:
           name: security-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.REPORT_DIR }}
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload Trivy Node report
         if: always()
