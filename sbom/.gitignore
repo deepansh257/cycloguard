@@ -6,4 +6,4 @@ sbom/context/
 node_modules/
 dist/
 sbom-output/
-sbom/runs/
+runs/
