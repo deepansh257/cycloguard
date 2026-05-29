@@ -97,5 +97,66 @@ Inside `--output` folder:
   - supports workflow dispatch inputs (`source_repo`, `source_branch`, `threshold`)
   - uploads full and per-language artifacts
 
+## End-to-end process
+1. Parse CLI inputs (`--source`, `--branch`, `--output`, scan flags).
+2. Acquire source code:
+   - local path: scan directly
+   - GitHub URL: clone first time, then fetch/pull on later runs from cache
+3. Ensure required tools exist (`cdxgen`, `cyclonedx-py`, `trivy`) with auto-install fallback.
+4. Auto-detect stack(s) from project markers.
+5. Generate CycloneDX SBOM per detected target.
+6. Run Trivy against generated SBOMs.
+7. Optionally run filesystem/secret/misconfig scan based on flags.
+8. Merge language reports and build `trivy-merged.json`.
+9. Evaluate gate threshold and write `gate-result.json`.
+10. Save all outputs into run-isolated artifact folder.
+
+## Source acquisition details
+- GitHub source cache:
+  - Windows default cache: `C:\\cg-sbom-cache`
+  - Linux/macOS default cache: temp directory (`cycloguard-sbom-cache`)
+- Branch handling:
+  - First time clone honors `--branch` when provided.
+  - Subsequent runs update existing clone with fetch + checkout + pull.
+- Windows long path mitigation:
+  - clone uses `core.longpaths=true`
+  - shorter cache root used to reduce path length issues.
+
+## Tool bootstrap behavior
+- If missing, scanner attempts automatic install:
+  - Windows: `winget` (fallback `choco`)
+  - macOS: `brew`
+  - Linux: apt-based install flow
+- On Windows, after Trivy install, scanner attempts PATH refresh in-process so run can continue without manual restart.
+
+## CI execution model
+- Manual (`workflow_dispatch`):
+  - uses provided `source_repo` and `source_branch` when set.
+- Push/PR:
+  - defaults to scanning checked-out workspace (`.`) to avoid PR synthetic branch issues.
+- CI artifact uploads:
+  - full bundle: `security-reports-<run>-<attempt>`
+  - per-language: node/java/python/csharp Trivy summaries.
+
+## Validation checklist
+1. Run scanner against known repo (single-stack and multi-stack examples).
+2. Check `detected-projects.json` includes expected targets.
+3. Verify per-language reports are present for detected stacks.
+4. Verify `trivy-merged.json` and `gate-result.json` are generated.
+5. In CI, confirm full bundle + per-language artifacts upload.
+
+## Troubleshooting
+- `trivy` not recognized:
+  - install may have succeeded but PATH may need refresh; rerun in new terminal if needed.
+- Git clone branch not found in CI:
+  - ensure manual input branch exists remotely; push/PR scans should use local checkout.
+- Missing reports:
+  - inspect `detected-projects.json` first to confirm stack detection occurred.
+
+## Current limitations / next enhancements
+- Strict SPDX generation per ecosystem is not fully implemented yet.
+- GitHub issue creation, Slack notifications, and AI remediation are scaffolded but not enabled in current active flow.
+- Historical report indexing exists but is not the primary active path in the latest scanner run.
+
 ## Note
 The old committed vulnerable sample applications under `sbom/apps/` were removed per updated approach. Scanning target is now always user-provided source repo/path.
