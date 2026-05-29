@@ -68,8 +68,6 @@ function buildMetadata(projectName: string, projectPath: string, scan: ScanResul
 function buildComponent(finding: CryptoFinding, rootPath: string): object {
   // All algorithm metadata comes from the registry — no local maps
   const meta = getAlgorithmMeta(finding.algorithm);
-
-  // Registry provides primitive, cryptoFunctions, classicalSecurityLevel, oid
   const primitive            = meta.primitive            ?? 'other';
   const cryptoFunctions      = meta.cryptoFunctions      ?? [];
   const classicalSecurity    = meta.classicalSecurityLevel ?? 128;
@@ -82,7 +80,8 @@ function buildComponent(finding: CryptoFinding, rootPath: string): object {
     classicalSecurity
   );
 
-  const relativeLocation = finding.location.replace(rootPath + '/', '').replace(rootPath, '');
+  const rawLocation = finding.location ?? 'unknown';
+const relativeLocation = rawLocation.replace(rootPath + '/', '').replace(rootPath, '');
 
   return {
     type: 'cryptoAsset',
