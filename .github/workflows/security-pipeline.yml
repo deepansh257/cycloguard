@@ -1,44 +1,52 @@
 name: Security Pipeline
 
 on:
+  # Manual run supports scanning any repo/branch without pushing code changes.
   workflow_dispatch:
+    inputs:
+      source_repo:
+        description: GitHub repository URL to scan
+        required: false
+        type: string
+      source_branch:
+        description: Branch name to scan
+        required: false
+        type: string
+      threshold:
+        description: Gate threshold
+        required: false
+        default: high
+        type: choice
+        options:
+          - high
+          - critical
   pull_request:
+    # Auto-run when security pipeline or sbom implementation changes.
     paths:
-      - 'sbom/apps/**'
-      - 'sbom/security-pipeline-config.yml'
       - '.github/workflows/security-pipeline.yml'
-      - 'sbom/.github/actions/**'
-      - 'sbom/scripts/**'
+      - 'sbom/**'
   push:
     branches: [ main ]
+    # Keep main branch continuously validated for scanner changes.
     paths:
-      - 'sbom/apps/**'
-      - 'sbom/security-pipeline-config.yml'
       - '.github/workflows/security-pipeline.yml'
-      - 'sbom/.github/actions/**'
-      - 'sbom/scripts/**'
+      - 'sbom/**'
 
 permissions:
-  contents: write
-  issues: write
-  security-events: write
-  pull-requests: write
+  contents: read
 
 jobs:
   security:
     runs-on: ubuntu-latest
     env:
-      CONFIG_FILE: sbom/security-pipeline-config.yml
+      # Unique per-run output folder used for all generated artifacts.
       REPORT_DIR: sbom/reports/${{ github.run_id }}-${{ github.run_attempt }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup runtimes
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -48,166 +56,121 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          distribution: temurin
-          java-version: '17'
+          dotnet-version: '8.0.x'
 
-      - name: Install tools
+      - name: Install Trivy
+        # Trivy is installed directly in job runtime for local parity.
         shell: bash
         run: |
-          pip install yq
           sudo apt-get update
-          sudo apt-get install -y jq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
 
-      - name: Prepare report directory
-        shell: bash
-        run: mkdir -p "$REPORT_DIR"
-
-      - name: Generate SBOMs (CycloneDX + SPDX)
-        id: sbom
-        uses: ./sbom/.github/actions/generate-sbom
-        with:
-          config-file: ${{ env.CONFIG_FILE }}
-          report-dir: ${{ env.REPORT_DIR }}
-
-      - name: Run Trivy scans
-        id: trivy
-        uses: ./sbom/.github/actions/run-trivy
-        with:
-          config-file: ${{ env.CONFIG_FILE }}
-          report-dir: ${{ env.REPORT_DIR }}
-
-      - name: Parse report and evaluate gate
-        id: gate
+      - name: Install SBOM CLI deps
+        # Installs TypeScript CLI dependencies from sbom/package.json.
         shell: bash
         run: |
-          node sbom/scripts/parse_trivy_report.js \
-            --report-dir "$REPORT_DIR" \
-            --threshold "$(yq -r '.gate.threshold' "$CONFIG_FILE")" \
-            --output "$REPORT_DIR/gate-result.json"
-          cat "$REPORT_DIR/gate-result.json"
-          echo "gate_failed=$(jq -r '.gate_failed' "$REPORT_DIR/gate-result.json")" >> "$GITHUB_OUTPUT"
+          cd sbom
+          npm install
 
-      - name: Create or update GitHub issue for Critical/High
-        # Temporarily disabled: SBOM-only rollout
-        if: false
+      - name: Resolve scan source
+        id: source
         shell: bash
         run: |
-          node sbom/scripts/create_github_issue.js \
-            --repo "${{ github.repository }}" \
-            --report "$REPORT_DIR/gate-result.json" \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --token "${{ secrets.GITHUB_TOKEN }}"
+          # Priority order:
+          # 1) workflow_dispatch inputs (source_repo/source_branch/threshold)
+          # 2) local workspace defaults for push/PR events
+          # Using local workspace avoids PR synthetic refs like "<id>/merge".
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_repo }}" ]]; then
+            echo "repo=${{ inputs.source_repo }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "repo=." >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: AI remediation attempt
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        id: ai_fix
-        uses: ./sbom/.github/actions/ai-fix
-        with:
-          config-file: ${{ env.CONFIG_FILE }}
-          report-dir: ${{ env.REPORT_DIR }}
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_branch }}" ]]; then
+            echo "branch=${{ inputs.source_branch }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "branch=${{ github.head_ref }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Re-scan after remediation attempt
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        id: trivy_rescan
-        uses: ./sbom/.github/actions/run-trivy
-        with:
-          config-file: ${{ env.CONFIG_FILE }}
-          report-dir: ${{ env.REPORT_DIR }}
-          scan-prefix: rescan
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.threshold }}" ]]; then
+            echo "threshold=${{ inputs.threshold }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "threshold=high" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build report index / history
-        # Temporarily disabled: SBOM-only rollout
-        if: false
+      - name: Run scanner CLI
+        # Main engine: clone-or-pull repo, auto-detect stack, generate SBOM, run Trivy, emit reports.
         shell: bash
         run: |
-          node sbom/scripts/manage_reports.js \
-            --report-dir "$REPORT_DIR" \
-            --run-id "${{ github.run_id }}" \
-            --run-attempt "${{ github.run_attempt }}" \
-            --sha "${{ github.sha }}" \
-            --ref "${{ github.ref_name }}" \
-            --actor "${{ github.actor }}"
+          mkdir -p "$REPORT_DIR"
+          cd sbom
+          npx ts-node src/index.ts \
+            --source "${{ steps.source.outputs.repo }}" \
+            --branch "${{ steps.source.outputs.branch }}" \
+            --threshold "${{ steps.source.outputs.threshold }}" \
+            --output "../$REPORT_DIR" \
+            --fs-scan true \
+            --secret-scan false \
+            --misconfig-scan false
 
-      - name: Upload SARIF (initial)
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ env.REPORT_DIR }}/trivy-results.sarif
-
-      - name: Upload SARIF (rescan)
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ env.REPORT_DIR }}/rescan-trivy-results.sarif
-
-      - name: Upload reports artifact
+      - name: List generated reports
         if: always()
+        # Useful debugging snapshot before artifact upload.
         shell: bash
         run: |
           echo "Report directory: $REPORT_DIR"
-          find "$REPORT_DIR" -maxdepth 3 -type f | sort
+          find "$REPORT_DIR" -maxdepth 4 -type f | sort
 
-      - name: Upload reports artifact
+      - name: Upload full report bundle
         if: always()
+        # Canonical artifact containing all outputs from this run.
         uses: actions/upload-artifact@v4
         with:
           name: security-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.REPORT_DIR }}
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload Trivy Node report
         if: always()
+        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
           name: trivy-node-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ env.REPORT_DIR }}/trivy-node.json
-            ${{ env.REPORT_DIR }}/sbom/node/cyclonedx.json
-            ${{ env.REPORT_DIR }}/sbom/node/spdx.json
+          path: ${{ env.REPORT_DIR }}/trivy-node.json
           if-no-files-found: warn
 
       - name: Upload Trivy Java report
         if: always()
+        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
           name: trivy-java-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ env.REPORT_DIR }}/trivy-java.json
-            ${{ env.REPORT_DIR }}/sbom/java/cyclonedx.json
-            ${{ env.REPORT_DIR }}/sbom/java/spdx.json
+          path: ${{ env.REPORT_DIR }}/trivy-java.json
           if-no-files-found: warn
 
       - name: Upload Trivy Python report
         if: always()
+        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
           name: trivy-python-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ env.REPORT_DIR }}/trivy-python.json
-            ${{ env.REPORT_DIR }}/sbom/python/cyclonedx.json
-            ${{ env.REPORT_DIR }}/sbom/python/spdx.json
+          path: ${{ env.REPORT_DIR }}/trivy-python.json
           if-no-files-found: warn
 
-      - name: Slack notification
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        uses: ./sbom/.github/actions/slack-notify
+      - name: Upload Trivy CSharp report
+        if: always()
+        # Convenience artifact: language-specific Trivy summary.
+        uses: actions/upload-artifact@v4
         with:
-          report-dir: ${{ env.REPORT_DIR }}
-          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: Enforce gate
-        # Temporarily disabled: SBOM-only rollout
-        if: false
-        shell: bash
-        run: |
-          echo "Gate failed: Critical/High vulnerabilities found."
-          exit 1
+          name: trivy-csharp-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.REPORT_DIR }}/trivy-csharp.json
+          if-no-files-found: warn
