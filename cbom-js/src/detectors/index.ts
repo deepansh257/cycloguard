@@ -21,8 +21,8 @@ export function runAllDetectors(
   const findings: CryptoFinding[] = [];
   const errors: string[] = [];
   const detectors = [
-    { name: 'registry',          fn: detectFromRegistry    },
-    { name: 'tls',               fn: detectTLS             },
+    { name: 'registry',          fn: detectFromRegistry     },
+    { name: 'tls',               fn: detectTLS              },
     { name: 'hardcoded-secrets', fn: detectHardcodedSecrets },
   ];
   for (const detector of detectors) {
@@ -41,14 +41,22 @@ export async function runCodeQLPass(
   astFindings: CryptoFinding[],
   options: ScanOptions
 ): Promise<CryptoFinding[]> {
-  const queriesDir = path.resolve(__dirname, '../../queries');
-  console.log('[CodeQL] queriesDir resolved to:', queriesDir);
-console.log('[CodeQL] queriesDir exists?', fs.existsSync(queriesDir));
-  const sarifResults = runCodeQL({
+  const queriesBase    = path.resolve(__dirname, '../../queries');
+  const jsQueriesDir   = path.join(queriesBase, 'js');
+  const javaQueriesDir = path.join(queriesBase, 'java');
+
+  console.log('[CodeQL] jsQueriesDir resolved to:', jsQueriesDir);
+  console.log('[CodeQL] jsQueriesDir exists?', fs.existsSync(jsQueriesDir));
+  console.log('[CodeQL] javaQueriesDir resolved to:', javaQueriesDir);
+  console.log('[CodeQL] javaQueriesDir exists?', fs.existsSync(javaQueriesDir));
+
+  const sarifResults = await runCodeQL({
     codeqlPath: options.codeqlPath,
     sourceRoot,
-    queriesDir,
+    jsQueriesDir,
+    javaQueriesDir,
   });
+
   const codeqlFindings = bridgeCodeQLResults(sarifResults);
   return deduplicateASTFindings([...astFindings, ...codeqlFindings]);
 }
