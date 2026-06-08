@@ -93,22 +93,22 @@ jobs:
           # 1) workflow_dispatch inputs (source_repo/source_branch/threshold)
           # 2) local workspace defaults for push/PR events
           # Using local workspace avoids PR synthetic refs like "<id>/merge".
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_repo }}" ]]; then
-            echo "repo=${{ inputs.source_repo }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.source_repo }}" ]]; then
+            echo "repo=${{ github.event.inputs.source_repo }}" >> "$GITHUB_OUTPUT"
           else
             echo "repo=." >> "$GITHUB_OUTPUT"
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_branch }}" ]]; then
-            echo "branch=${{ inputs.source_branch }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.source_branch }}" ]]; then
+            echo "branch=${{ github.event.inputs.source_branch }}" >> "$GITHUB_OUTPUT"
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "branch=${{ github.head_ref }}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.threshold }}" ]]; then
-            echo "threshold=${{ inputs.threshold }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.threshold }}" ]]; then
+            echo "threshold=${{ github.event.inputs.threshold }}" >> "$GITHUB_OUTPUT"
           else
             echo "threshold=high" >> "$GITHUB_OUTPUT"
           fi
@@ -120,7 +120,7 @@ jobs:
           echo "Source repo: ${{ steps.source.outputs.repo }}"
           echo "Source branch: ${{ steps.source.outputs.branch }}"
           echo "Threshold: ${{ steps.source.outputs.threshold }}"
-          echo "Issue target input: ${{ inputs.issue_target_repo }}"
+          echo "Issue target input: ${{ github.event.inputs.issue_target_repo }}"
 
       - name: Run scanner CLI
         # Main engine: clone-or-pull repo, auto-detect stack, generate SBOM, run Trivy, emit reports.
@@ -148,8 +148,8 @@ jobs:
         id: issue_repo
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.issue_target_repo }}" ]]; then
-            echo "repo=${{ inputs.issue_target_repo }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.issue_target_repo }}" ]]; then
+            echo "repo=${{ github.event.inputs.issue_target_repo }}" >> "$GITHUB_OUTPUT"
           else
             source_repo="${{ steps.source.outputs.repo }}"
             if [[ "$source_repo" == "." ]]; then
