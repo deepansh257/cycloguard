@@ -134,10 +134,26 @@ Inside `--output` folder:
 ## CI workflow
 - `.github/workflows/security-pipeline.yml`
   - wraps the same scanner flow for CI
-  - supports workflow dispatch inputs (`source_repo`, `source_branch`, `threshold`)
+  - supports workflow dispatch inputs (`source_repo`, `source_branch`, `issue_target_repo`, `threshold`)
   - creates or updates GitHub issues for `HIGH`/`CRITICAL` findings
   - sends Slack summaries for all severities
   - uploads full and per-language artifacts
+
+Manual CI usage from GitHub Actions:
+1. Open the `Security Pipeline` workflow in the repository Actions tab.
+2. Click `Run workflow`.
+3. Fill the workflow inputs:
+   - `source_repo`: GitHub repository URL to scan
+   - `source_branch`: branch to scan from that repo
+   - `issue_target_repo`: optional `owner/repo` where the issue should be created
+   - `threshold`: `high` or `critical`
+4. Start the workflow and download the artifact bundle after completion.
+
+Example manual CI inputs:
+- `source_repo`: `https://github.com/vulnerable-apps/juice-shop.git`
+- `source_branch`: `master`
+- `issue_target_repo`: `your-username/your-repo`
+- `threshold`: `high`
 
 ## Local full-flow usage
 Example with repo URL + GitHub issue + Slack:
@@ -196,7 +212,8 @@ Example behavior:
 
 ## CI execution model
 - Manual (`workflow_dispatch`):
-  - uses provided `source_repo` and `source_branch` when set.
+  - uses provided `source_repo` and `source_branch` when set
+  - can route issue creation into `issue_target_repo` when provided
 - Push/PR:
   - defaults to scanning checked-out workspace (`.`) to avoid PR synthetic branch issues.
 - CI artifact uploads:
