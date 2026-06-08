@@ -155,8 +155,7 @@ jobs:
             --report "${{ steps.scan_dir.outputs.dir }}/gate-result.json" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --token "${{ secrets.API_GITHUB_TOKEN }}" \
-            --source-repo "${{ step
-            s.source.outputs.repo }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
             --source-branch "${{ steps.source.outputs.branch }}" \
             --output "${{ steps.scan_dir.outputs.dir }}/issue-result.json"
 
