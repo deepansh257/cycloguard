@@ -20,6 +20,7 @@ const ref = getArg('ref');
 const actor = getArg('actor');
 const sourceRepo = getArg('source-repo', 'unknown-repo');
 const sourceBranch = getArg('source-branch', 'unknown-branch');
+const historyFile = getArg('history-file');
 
 if (!reportDir || !runId || !runAttempt || !sha || !ref || !actor) {
   console.error('Missing required args');
@@ -28,7 +29,7 @@ if (!reportDir || !runId || !runAttempt || !sha || !ref || !actor) {
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
 const issueResult = readJsonIfExists(path.join(reportDir, 'issue-result.json'), {});
-const indexFile = 'sbom/reports/history-index.json';
+const indexFile = historyFile || path.join(path.dirname(reportDir), 'history-index.json');
 let history = [];
 
 if (fs.existsSync(indexFile)) {

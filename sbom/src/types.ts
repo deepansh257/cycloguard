@@ -13,6 +13,11 @@ export type Args = {
   fsScan: boolean;
   secretScan: boolean;
   misconfigScan: boolean;
+  enableIssueCreation: boolean;
+  enableSlack: boolean;
+  githubRepo?: string;
+  githubToken?: string;
+  slackWebhookUrl?: string;
 };
 
 export type ProjectTarget = {

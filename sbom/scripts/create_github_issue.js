@@ -16,6 +16,7 @@ function ghApi(method, url, token, payload = null) {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
+        'User-Agent': 'cycloguard-sbom-scanner',
         'X-GitHub-Api-Version': '2022-11-28',
         ...(data ? { 'Content-Type': 'application/json', 'Content-Length': data.length } : {})
       }
@@ -97,7 +98,23 @@ async function main() {
   ].join('\n');
 
   const issuesUrl = `https://api.github.com/repos/${repo}/issues?state=open&per_page=100`;
-  const existingIssues = await ghApi('GET', issuesUrl, token);
+  let existingIssues;
+  try {
+    existingIssues = await ghApi('GET', issuesUrl, token);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Issues has been disabled')) {
+      fs.writeFileSync(output, JSON.stringify({
+        mode: 'skipped',
+        reason: 'issues_disabled_for_target_repository',
+        total_vulnerabilities: allVulns.length,
+        ticket_vulnerability_count: ticketVulns.length,
+        alert_only_count: alertOnlyVulns.length
+      }, null, 2));
+      return;
+    }
+    throw err;
+  }
   const existing = (existingIssues || []).find((issue) =>
     issue && issue.body && issue.body.includes(marker)
   );
@@ -125,11 +142,35 @@ async function main() {
       alert_only_count: alertOnlyVulns.length
     };
   } else {
-    const created = await ghApi('POST', `https://api.github.com/repos/${repo}/issues`, token, {
-      title,
-      body: issueBody,
-      labels: ['security', 'automated', 'trivy', 'cycloguard']
-    });
+    let created;
+    try {
+      created = await ghApi('POST', `https://api.github.com/repos/${repo}/issues`, token, {
+        title,
+        body: issueBody,
+        labels: ['security', 'automated', 'trivy', 'cycloguard']
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Issues has been disabled')) {
+        fs.writeFileSync(output, JSON.stringify({
+          mode: 'skipped',
+          reason: 'issues_disabled_for_target_repository',
+          total_vulnerabilities: allVulns.length,
+          ticket_vulnerability_count: ticketVulns.length,
+          alert_only_count: alertOnlyVulns.length
+        }, null, 2));
+        return;
+      }
+      // Some target repos allow issue creation but not automatic label creation.
+      if (message.includes('create labels') || message.includes('"field":"label"')) {
+        created = await ghApi('POST', `https://api.github.com/repos/${repo}/issues`, token, {
+          title,
+          body: issueBody
+        });
+      } else {
+        throw err;
+      }
+    }
     result = {
       mode: 'created',
       issue_number: created.number,

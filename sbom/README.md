@@ -53,6 +53,44 @@ Optional flags:
 - `--secret-scan true|false` (default: `false`)
 - `--misconfig-scan true|false` (default: `false`)
 - `--workdir <path>` (custom persistent clone cache location)
+- `--create-issues true|false` (default: `true`)
+- `--notify-slack true|false` (default: `true`)
+- `--github-repo <owner/repo>` (optional override for issue target)
+- `--github-token <token>` (optional, otherwise env is used)
+- `--slack-webhook <url>` (optional, otherwise env is used)
+
+Local automation credentials:
+- GitHub issues:
+  - set `API_GITHUB_TOKEN` or `GITHUB_TOKEN`
+  - optional `GITHUB_TARGET_REPO` to override target repo
+- Slack:
+  - set `SLACK_WEBHOOK_URL`
+- If credentials are missing, the scanner still runs and produces reports; issue/slack actions are skipped gracefully.
+
+How local issue creation works:
+- `--source` or the scanned GitHub URL decides what repository is scanned.
+- `GITHUB_TARGET_REPO` decides where the GitHub issue is created.
+- If `GITHUB_TARGET_REPO` is not set, the scanner tries to infer the issue target repo from:
+  - the provided GitHub source URL, or
+  - the local repository `origin` remote URL.
+- This means you can:
+  - scan an external repo like Juice Shop
+  - but create the issue in your own repository by setting `GITHUB_TARGET_REPO=owner/repo`
+- Only the issue target repository needs:
+  - GitHub Issues enabled
+  - token access/permissions to create issues
+
+Using a local `.env` file:
+```env
+API_GITHUB_TOKEN=your_github_token
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+GITHUB_TARGET_REPO=owner/repo
+```
+
+Notes:
+- Place `.env` inside the `sbom/` folder for local runs.
+- `.env` is ignored by Git and will not be committed.
+- CLI flags still override `.env` values when both are provided.
 
 Output isolation behavior:
 - Scanner now creates a source-specific subfolder under `--output` automatically.
@@ -100,6 +138,21 @@ Inside `--output` folder:
   - creates or updates GitHub issues for `HIGH`/`CRITICAL` findings
   - sends Slack summaries for all severities
   - uploads full and per-language artifacts
+
+## Local full-flow usage
+Example with repo URL + GitHub issue + Slack:
+```bash
+cd sbom
+set API_GITHUB_TOKEN=your_token
+set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+set GITHUB_TARGET_REPO=your-username/your-repo
+npx ts-node src/index.ts --source https://github.com/org/repo.git --branch main --output ./runs
+```
+
+Example behavior:
+- scan source repo: `https://github.com/vulnerable-apps/juice-shop.git`
+- issue target repo: `your-username/your-repo`
+- Slack notification: sent using `SLACK_WEBHOOK_URL`
 
 ## Severity handling policy
 - `CRITICAL` / `HIGH`:
@@ -150,6 +203,15 @@ Inside `--output` folder:
   - full bundle: `security-reports-<run>-<attempt>`
   - per-language: node/java/python/csharp Trivy summaries.
 
+Local vs CI behavior:
+- Local:
+  - can scan external GitHub repo URLs directly
+  - can create GitHub issues and send Slack using `.env` or CLI-provided credentials
+- CI:
+  - usually scans the checked-out workspace by default
+  - can also scan external repos through manual dispatch inputs
+  - uses GitHub Secrets instead of `.env`
+
 ## Validation checklist
 1. Run scanner against known repo (single-stack and multi-stack examples).
 2. Check `detected-projects.json` includes expected targets.
@@ -167,8 +229,8 @@ Inside `--output` folder:
 
 ## Current limitations / next enhancements
 - Strict SPDX generation per ecosystem is not fully implemented yet.
-- GitHub issue creation, Slack notifications, and AI remediation are scaffolded but not enabled in current active flow.
-- Historical report indexing exists but is not the primary active path in the latest scanner run.
+- GitHub issue creation depends on the target repo having Issues enabled and token access.
+- Historical report indexing is enabled, but can be expanded further for richer audit workflows.
 
 ## Note
 The old committed vulnerable sample applications under `sbom/apps/` were removed per updated approach. Scanning target is now always user-provided source repo/path.

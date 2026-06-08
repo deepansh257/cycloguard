@@ -14,6 +14,12 @@ export function isGithubUrl(source: string): boolean {
   return source.startsWith("https://github.com/") || source.startsWith("git@github.com:");
 }
 
+function parseGithubRepoFromUrl(source: string): string | null {
+  const match = source.match(/github\.com[:/]+([^/]+)\/([^/]+?)(?:\.git)?$/);
+  if (!match) return null;
+  return `${match[1]}/${match[2]}`;
+}
+
 function cacheSlug(source: string): string {
   return source
     .replace(/^https?:\/\//, "")
@@ -53,6 +59,29 @@ function branchExistsLocally(repoDir: string, branch: string): boolean {
   } catch {
     return false;
   }
+}
+
+function getOriginUrl(repoDir: string): string | null {
+  try {
+    return execSync("git config --get remote.origin.url", {
+      cwd: repoDir,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).toString("utf-8").trim();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveGithubRepoIdentifier(source: string, repoRoot: string, override?: string): string | null {
+  if (override) return override;
+
+  if (isGithubUrl(source)) {
+    return parseGithubRepoFromUrl(source);
+  }
+
+  const originUrl = getOriginUrl(repoRoot);
+  if (!originUrl) return null;
+  return parseGithubRepoFromUrl(originUrl);
 }
 
 export function acquireSource(args: Args): { repoRoot: string; cleanup?: () => void } {
