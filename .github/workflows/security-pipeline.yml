@@ -5,11 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       source_repo:
-        description: GitHub repository URL to scan
+        description: GitHub repository URL to scan (example: https://github.com/org/repo.git)
         required: false
         type: string
       source_branch:
-        description: Branch name to scan
+        description: Branch name to scan from the provided repo URL
+        required: false
+        type: string
+      issue_target_repo:
+        description: Optional owner/repo where GitHub issues should be created
         required: false
         type: string
       threshold:
@@ -109,6 +113,15 @@ jobs:
             echo "threshold=high" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Show resolved execution inputs
+        shell: bash
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Source repo: ${{ steps.source.outputs.repo }}"
+          echo "Source branch: ${{ steps.source.outputs.branch }}"
+          echo "Threshold: ${{ steps.source.outputs.threshold }}"
+          echo "Issue target input: ${{ inputs.issue_target_repo }}"
+
       - name: Run scanner CLI
         # Main engine: clone-or-pull repo, auto-detect stack, generate SBOM, run Trivy, emit reports.
         shell: bash
@@ -135,16 +148,25 @@ jobs:
         id: issue_repo
         shell: bash
         run: |
-          source_repo="${{ steps.source.outputs.repo }}"
-          if [[ "$source_repo" == "." ]]; then
-            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
-          elif [[ "$source_repo" =~ github\.com[:/]+([^/]+)/([^/]+)(\.git)?$ ]]; then
-            repo_name="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-            repo_name="${repo_name%.git}"
-            echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.issue_target_repo }}" ]]; then
+            echo "repo=${{ inputs.issue_target_repo }}" >> "$GITHUB_OUTPUT"
           else
-            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            source_repo="${{ steps.source.outputs.repo }}"
+            if [[ "$source_repo" == "." ]]; then
+              echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            elif [[ "$source_repo" =~ github\.com[:/]+([^/]+)/([^/]+)(\.git)?$ ]]; then
+              repo_name="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+              repo_name="${repo_name%.git}"
+              echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
+            else
+              echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            fi
           fi
+
+      - name: Show resolved issue target
+        shell: bash
+        run: |
+          echo "Issue target repo: ${{ steps.issue_repo.outputs.repo }}"
 
       - name: Create or update GitHub issue
         if: always()
@@ -191,6 +213,23 @@ jobs:
             --actor "${{ github.actor }}" \
             --source-repo "${{ steps.source.outputs.repo }}" \
             --source-branch "${{ steps.source.outputs.branch }}"
+
+      - name: Publish workflow summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Security Pipeline Summary"
+            echo ""
+            echo "- Event: \`${{ github.event_name }}\`"
+            echo "- Scanned source: \`${{ steps.source.outputs.repo }}\`"
+            echo "- Scanned branch: \`${{ steps.source.outputs.branch }}\`"
+            echo "- Threshold: \`${{ steps.source.outputs.threshold }}\`"
+            echo "- Issue target repo: \`${{ steps.issue_repo.outputs.repo }}\`"
+            echo "- Report root: \`${{ env.REPORT_DIR }}\`"
+            echo "- Scan output folder: \`${{ steps.scan_dir.outputs.dir }}\`"
+            echo "- Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: List generated reports
         if: always()
