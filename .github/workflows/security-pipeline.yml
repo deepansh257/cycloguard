@@ -34,6 +34,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   security:
@@ -41,6 +42,7 @@ jobs:
     env:
       # Unique per-run output folder used for all generated artifacts.
       REPORT_DIR: sbom/reports/${{ github.run_id }}-${{ github.run_attempt }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Checkout
@@ -121,6 +123,75 @@ jobs:
             --fs-scan true \
             --secret-scan false \
             --misconfig-scan false
+
+      - name: Resolve generated scan directory
+        id: scan_dir
+        shell: bash
+        run: |
+          scan_dir=$(find "$REPORT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          echo "dir=$scan_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve issue target repository
+        id: issue_repo
+        shell: bash
+        run: |
+          source_repo="${{ steps.source.outputs.repo }}"
+          if [[ "$source_repo" == "." ]]; then
+            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$source_repo" =~ github\.com[:/]+([^/]+)/([^/]+)(\.git)?$ ]]; then
+            repo_name="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+            repo_name="${repo_name%.git}"
+            echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
+          else
+            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update GitHub issue
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/create_github_issue.js \
+            --repo "${{ steps.issue_repo.outputs.repo }}" \
+            --report "${{ steps.scan_dir.outputs.dir }}/gate-result.json" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --token "${{ secrets.API_GITHUB_TOKEN }}" \
+            --source-repo "${{ step
+            s.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}" \
+            --output "${{ steps.scan_dir.outputs.dir }}/issue-result.json"
+
+      - name: Build Slack payload
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/build_slack_payload.js \
+            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}" \
+            --output "${{ steps.scan_dir.outputs.dir }}/slack-payload.json"
+
+      - name: Send Slack notification
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        shell: bash
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data @"${{ steps.scan_dir.outputs.dir }}/slack-payload.json" \
+            "$SLACK_WEBHOOK_URL"
+
+      - name: Record report history
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/manage_reports.js \
+            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --sha "${{ github.sha }}" \
+            --ref "${{ github.ref_name }}" \
+            --actor "${{ github.actor }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}"
 
       - name: List generated reports
         if: always()

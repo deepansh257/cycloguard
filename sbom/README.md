@@ -79,6 +79,8 @@ Inside `--output` folder:
 - `trivy-results.sarif`
 - `trivy-merged.json`
 - `gate-result.json`
+- `issue-result.json` (when GitHub issue automation runs)
+- `slack-payload.json` (when Slack notification payload is built)
 
 ## Source code structure (`sbom/src`)
 - `index.ts`: thin orchestrator entrypoint
@@ -95,7 +97,17 @@ Inside `--output` folder:
 - `.github/workflows/security-pipeline.yml`
   - wraps the same scanner flow for CI
   - supports workflow dispatch inputs (`source_repo`, `source_branch`, `threshold`)
+  - creates or updates GitHub issues for `HIGH`/`CRITICAL` findings
+  - sends Slack summaries for all severities
   - uploads full and per-language artifacts
+
+## Severity handling policy
+- `CRITICAL` / `HIGH`:
+  - included in gate failure logic
+  - used to create or update a GitHub security issue
+- `MEDIUM` / `LOW`:
+  - included in reports and Slack summary
+  - alert-only by default, no separate GitHub ticket created
 
 ## End-to-end process
 1. Parse CLI inputs (`--source`, `--branch`, `--output`, scan flags).
