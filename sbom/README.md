@@ -149,6 +149,27 @@ Manual CI usage from GitHub Actions:
    - `threshold`: `high` or `critical`
 4. Start the workflow and download the artifact bundle after completion.
 
+Detailed workflow-dispatch steps:
+1. Push the latest workflow changes to GitHub so the updated `Security Pipeline` is available.
+2. Open the repository on GitHub.
+3. Go to the `Actions` tab.
+4. Select the `Security Pipeline` workflow from the left panel.
+5. Click the `Run workflow` button on the right side.
+6. Enter the scan inputs:
+   - `source_repo`: full GitHub repo URL such as `https://github.com/vulnerable-apps/juice-shop.git`
+   - `source_branch`: branch name such as `master`
+   - `issue_target_repo`: optional `owner/repo` where issues should be created
+   - `threshold`: choose `high` or `critical`
+7. Click the final `Run workflow` button to start the scan.
+8. Open the running workflow and check:
+   - `Show resolved execution inputs`
+   - `Show resolved issue target`
+   - `Publish workflow summary`
+9. After completion, verify:
+   - artifact bundle is uploaded
+   - Slack notification is sent
+   - GitHub issue is created or updated in the configured target repo
+
 Example manual CI inputs:
 - `source_repo`: `https://github.com/vulnerable-apps/juice-shop.git`
 - `source_branch`: `master`
