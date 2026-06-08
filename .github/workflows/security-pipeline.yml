@@ -5,19 +5,19 @@ on:
   workflow_dispatch:
     inputs:
       source_repo:
-        description: GitHub repository URL to scan (example: https://github.com/org/repo.git)
+        description: "GitHub repository URL to scan (example: https://github.com/org/repo.git)"
         required: false
         type: string
       source_branch:
-        description: Branch name to scan from the provided repo URL
+        description: "Branch name to scan from the provided repo URL"
         required: false
         type: string
       issue_target_repo:
-        description: Optional owner/repo where GitHub issues should be created
+        description: "Optional owner/repo where GitHub issues should be created"
         required: false
         type: string
       threshold:
-        description: Gate threshold
+        description: "Gate threshold"
         required: false
         default: high
         type: choice
