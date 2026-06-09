@@ -5,15 +5,19 @@ on:
   workflow_dispatch:
     inputs:
       source_repo:
-        description: GitHub repository URL to scan
+        description: "GitHub repository URL to scan (example: https://github.com/org/repo.git)"
         required: false
         type: string
       source_branch:
-        description: Branch name to scan
+        description: "Branch name to scan from the provided repo URL"
+        required: false
+        type: string
+      issue_target_repo:
+        description: "Optional owner/repo where GitHub issues should be created"
         required: false
         type: string
       threshold:
-        description: Gate threshold
+        description: "Gate threshold"
         required: false
         default: high
         type: choice
@@ -34,6 +38,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   security:
@@ -41,6 +46,7 @@ jobs:
     env:
       # Unique per-run output folder used for all generated artifacts.
       REPORT_DIR: sbom/reports/${{ github.run_id }}-${{ github.run_attempt }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Checkout
@@ -87,25 +93,34 @@ jobs:
           # 1) workflow_dispatch inputs (source_repo/source_branch/threshold)
           # 2) local workspace defaults for push/PR events
           # Using local workspace avoids PR synthetic refs like "<id>/merge".
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_repo }}" ]]; then
-            echo "repo=${{ inputs.source_repo }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.source_repo }}" ]]; then
+            echo "repo=${{ github.event.inputs.source_repo }}" >> "$GITHUB_OUTPUT"
           else
             echo "repo=." >> "$GITHUB_OUTPUT"
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.source_branch }}" ]]; then
-            echo "branch=${{ inputs.source_branch }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.source_branch }}" ]]; then
+            echo "branch=${{ github.event.inputs.source_branch }}" >> "$GITHUB_OUTPUT"
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "branch=${{ github.head_ref }}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.threshold }}" ]]; then
-            echo "threshold=${{ inputs.threshold }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.threshold }}" ]]; then
+            echo "threshold=${{ github.event.inputs.threshold }}" >> "$GITHUB_OUTPUT"
           else
             echo "threshold=high" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Show resolved execution inputs
+        shell: bash
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Source repo: ${{ steps.source.outputs.repo }}"
+          echo "Source branch: ${{ steps.source.outputs.branch }}"
+          echo "Threshold: ${{ steps.source.outputs.threshold }}"
+          echo "Issue target input: ${{ github.event.inputs.issue_target_repo }}"
 
       - name: Run scanner CLI
         # Main engine: clone-or-pull repo, auto-detect stack, generate SBOM, run Trivy, emit reports.
@@ -121,6 +136,100 @@ jobs:
             --fs-scan true \
             --secret-scan false \
             --misconfig-scan false
+
+      - name: Resolve generated scan directory
+        id: scan_dir
+        shell: bash
+        run: |
+          scan_dir=$(find "$REPORT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          echo "dir=$scan_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve issue target repository
+        id: issue_repo
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.issue_target_repo }}" ]]; then
+            echo "repo=${{ github.event.inputs.issue_target_repo }}" >> "$GITHUB_OUTPUT"
+          else
+            source_repo="${{ steps.source.outputs.repo }}"
+            if [[ "$source_repo" == "." ]]; then
+              echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            elif [[ "$source_repo" =~ github\.com[:/]+([^/]+)/([^/]+)(\.git)?$ ]]; then
+              repo_name="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+              repo_name="${repo_name%.git}"
+              echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
+            else
+              echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Show resolved issue target
+        shell: bash
+        run: |
+          echo "Issue target repo: ${{ steps.issue_repo.outputs.repo }}"
+
+      - name: Create or update GitHub issue
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/create_github_issue.js \
+            --repo "${{ steps.issue_repo.outputs.repo }}" \
+            --report "${{ steps.scan_dir.outputs.dir }}/gate-result.json" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --token "${{ secrets.API_GITHUB_TOKEN }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}" \
+            --output "${{ steps.scan_dir.outputs.dir }}/issue-result.json"
+
+      - name: Build Slack payload
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/build_slack_payload.js \
+            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}" \
+            --output "${{ steps.scan_dir.outputs.dir }}/slack-payload.json"
+
+      - name: Send Slack notification
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        shell: bash
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data @"${{ steps.scan_dir.outputs.dir }}/slack-payload.json" \
+            "$SLACK_WEBHOOK_URL"
+
+      - name: Record report history
+        if: always()
+        shell: bash
+        run: |
+          node sbom/scripts/manage_reports.js \
+            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --sha "${{ github.sha }}" \
+            --ref "${{ github.ref_name }}" \
+            --actor "${{ github.actor }}" \
+            --source-repo "${{ steps.source.outputs.repo }}" \
+            --source-branch "${{ steps.source.outputs.branch }}"
+
+      - name: Publish workflow summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Security Pipeline Summary"
+            echo ""
+            echo "- Event: \`${{ github.event_name }}\`"
+            echo "- Scanned source: \`${{ steps.source.outputs.repo }}\`"
+            echo "- Scanned branch: \`${{ steps.source.outputs.branch }}\`"
+            echo "- Threshold: \`${{ steps.source.outputs.threshold }}\`"
+            echo "- Issue target repo: \`${{ steps.issue_repo.outputs.repo }}\`"
+            echo "- Report root: \`${{ env.REPORT_DIR }}\`"
+            echo "- Scan output folder: \`${{ steps.scan_dir.outputs.dir }}\`"
+            echo "- Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: List generated reports
         if: always()

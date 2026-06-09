@@ -33,6 +33,11 @@ export function parseArgs(argv: string[]): Args {
     workdir: map.get("workdir"),
     fsScan: map.get("fs-scan") !== "false",
     secretScan: map.get("secret-scan") === "true",
-    misconfigScan: map.get("misconfig-scan") === "true"
+    misconfigScan: map.get("misconfig-scan") === "true",
+    enableIssueCreation: map.get("create-issues") !== "false",
+    enableSlack: map.get("notify-slack") !== "false",
+    githubRepo: map.get("github-repo") || process.env.GITHUB_TARGET_REPO || process.env.GITHUB_REPOSITORY,
+    githubToken: map.get("github-token") || process.env.API_GITHUB_TOKEN || process.env.GITHUB_TOKEN,
+    slackWebhookUrl: map.get("slack-webhook") || process.env.SLACK_WEBHOOK_URL
   };
 }

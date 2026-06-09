@@ -3,6 +3,7 @@
  * Provides a single place for command execution and command-existence checks.
  */
 import { execSync } from "child_process";
+import * as path from "path";
 
 export function run(command: string, cwd?: string): void {
   console.log(`\n$ ${command}`);
@@ -21,4 +22,9 @@ export function commandExists(command: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function runNodeScript(scriptPath: string, args: string[]): void {
+  const escapedArgs = args.map((arg) => `"${arg.replace(/"/g, '\\"')}"`).join(" ");
+  run(`node "${path.resolve(scriptPath)}" ${escapedArgs}`);
 }
