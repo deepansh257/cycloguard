@@ -986,10 +986,363 @@
         { "name": "Argon2PasswordEncoder", "detection": "newExpression", "fixedAlgorithm": "ARGON2",  "primitive": "kdf" },
         { "name": "Pbkdf2PasswordEncoder", "detection": "newExpression", "fixedAlgorithm": "PBKDF2",  "primitive": "kdf" }
       ]
+    },
+
+    "hashlib": {
+      "language": "python",
+      "aliases": ["hashlib"],
+      "description": "Python standard-library hash module",
+      "type": "builtin",
+      "methods": [
+        { "name": "new",       "detection": "memberCall", "algoArgIndex": 0, "primitive": "hash",
+          "notes": "hashlib.new(name, ...) — algorithm is the first argument" },
+        { "name": "md5",       "detection": "memberCall", "fixedAlgorithm": "MD5",    "primitive": "hash" },
+        { "name": "sha1",      "detection": "memberCall", "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "sha224",    "detection": "memberCall", "fixedAlgorithm": "SHA-224","primitive": "hash" },
+        { "name": "sha256",    "detection": "memberCall", "fixedAlgorithm": "SHA-256","primitive": "hash" },
+        { "name": "sha384",    "detection": "memberCall", "fixedAlgorithm": "SHA-384","primitive": "hash" },
+        { "name": "sha512",    "detection": "memberCall", "fixedAlgorithm": "SHA-512","primitive": "hash" },
+        { "name": "sha3_256",  "detection": "memberCall", "fixedAlgorithm": "SHA3-256","primitive": "hash" },
+        { "name": "sha3_512",  "detection": "memberCall", "fixedAlgorithm": "SHA3-512","primitive": "hash" },
+        { "name": "blake2b",   "detection": "memberCall", "fixedAlgorithm": "BLAKE2B","primitive": "hash" },
+        { "name": "blake2s",   "detection": "memberCall", "fixedAlgorithm": "BLAKE2S","primitive": "hash" },
+        { "name": "pbkdf2_hmac","detection": "memberCall", "algoArgIndex": 0, "primitive": "kdf",
+          "notes": "hashlib.pbkdf2_hmac(hash_name, ...) — first arg is the hash name" }
+      ]
+    },
+ 
+    "hmac": {
+      "language": "python",
+      "aliases": ["hmac"],
+      "description": "Python standard-library HMAC module",
+      "type": "builtin",
+      "methods": [
+        { "name": "new",    "detection": "memberCall",   "algoArgIndex": 2, "algoPrefix": "HMAC-",
+          "primitive": "mac", "notes": "hmac.new(key, msg, digestmod) — digestmod is the hash" },
+        { "name": "digest", "detection": "memberCall",   "fixedAlgorithm": "HMAC", "primitive": "mac" }
+      ]
+    },
+ 
+    "secrets": {
+      "language": "python",
+      "aliases": ["secrets"],
+      "description": "Python standard-library cryptographically-strong random module (3.6+)",
+      "type": "builtin",
+      "methods": [
+        { "name": "token_bytes",  "detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf" },
+        { "name": "token_hex",    "detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf" },
+        { "name": "token_urlsafe","detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf" },
+        { "name": "randbelow",    "detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf" },
+        { "name": "choice",       "detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf" }
+      ]
+    },
+ 
+    "os-urandom": {
+      "language": "python",
+      "aliases": ["os"],
+      "description": "os.urandom — OS-backed CSPRNG",
+      "type": "builtin",
+      "methods": [
+        { "name": "urandom", "detection": "memberCall", "fixedAlgorithm": "CSPRNG", "primitive": "prf",
+          "notes": "os.urandom — cryptographically secure OS random bytes" }
+      ]
+    },
+ 
+    "pycryptodome": {
+      "language": "python",
+      "aliases": [
+        "Crypto", "Cryptodome",
+        "Crypto.Cipher", "Cryptodome.Cipher",
+        "Crypto.Hash",   "Cryptodome.Hash",
+        "Crypto.Signature", "Cryptodome.Signature",
+        "Crypto.PublicKey", "Cryptodome.PublicKey",
+        "Crypto.Protocol.KDF", "Cryptodome.Protocol.KDF",
+        "Crypto.Random", "Cryptodome.Random"
+      ],
+      "description": "PyCryptodome / PyCryptodomex cryptography library",
+      "type": "pip",
+      "methods": [
+        { "name": "AES",       "detection": "newExpression", "fixedAlgorithm": "AES",    "primitive": "blockCipher" },
+        { "name": "DES",       "detection": "newExpression", "fixedAlgorithm": "DES",    "primitive": "blockCipher" },
+        { "name": "DES3",      "detection": "newExpression", "fixedAlgorithm": "3DES",   "primitive": "blockCipher" },
+        { "name": "ARC4",      "detection": "newExpression", "fixedAlgorithm": "RC4",    "primitive": "streamCipher" },
+        { "name": "ARC2",      "detection": "newExpression", "fixedAlgorithm": "RC2",    "primitive": "blockCipher" },
+        { "name": "Blowfish",  "detection": "newExpression", "fixedAlgorithm": "BLOWFISH","primitive": "blockCipher" },
+        { "name": "ChaCha20",  "detection": "newExpression", "fixedAlgorithm": "CHACHA20","primitive": "streamCipher" },
+        { "name": "Salsa20",   "detection": "newExpression", "fixedAlgorithm": "SALSA20", "primitive": "streamCipher" },
+        { "name": "MD5",       "detection": "newExpression", "fixedAlgorithm": "MD5",    "primitive": "hash" },
+        { "name": "SHA",       "detection": "newExpression", "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "SHA256",    "detection": "newExpression", "fixedAlgorithm": "SHA-256","primitive": "hash" },
+        { "name": "SHA512",    "detection": "newExpression", "fixedAlgorithm": "SHA-512","primitive": "hash" },
+        { "name": "SHA3_256",  "detection": "newExpression", "fixedAlgorithm": "SHA3-256","primitive": "hash" },
+        { "name": "BLAKE2b",   "detection": "newExpression", "fixedAlgorithm": "BLAKE2B","primitive": "hash" },
+        { "name": "PKCS1_v1_5","detection": "newExpression", "fixedAlgorithm": "RSA",    "primitive": "pke",
+          "notes": "PKCS1_v1_5 — consider OAEP padding for encryption, PSS for signatures" },
+        { "name": "PKCS1_OAEP","detection": "newExpression", "fixedAlgorithm": "RSA-OAEP","primitive": "pke" },
+        { "name": "DSS",       "detection": "newExpression", "fixedAlgorithm": "DSA",    "primitive": "signature" },
+        { "name": "ECDSA",     "detection": "newExpression", "fixedAlgorithm": "ECDSA",  "primitive": "signature" },
+        { "name": "ECDH",      "detection": "newExpression", "fixedAlgorithm": "ECDH",   "primitive": "keyAgreement" },
+        { "name": "RSA",       "detection": "newExpression", "fixedAlgorithm": "RSA",    "primitive": "pke" },
+        { "name": "ECC",       "detection": "newExpression", "fixedAlgorithm": "EC",     "primitive": "pke" },
+        { "name": "scrypt",    "detection": "memberCall",    "fixedAlgorithm": "SCRYPT",  "primitive": "kdf" },
+        { "name": "bcrypt",    "detection": "memberCall",    "fixedAlgorithm": "BCRYPT",  "primitive": "kdf" }
+      ]
+    },
+ 
+    "cryptography": {
+      "language": "python",
+      "aliases": [
+        "cryptography",
+        "cryptography.hazmat.primitives.hashes",
+        "cryptography.hazmat.primitives.ciphers",
+        "cryptography.hazmat.primitives.ciphers.algorithms",
+        "cryptography.hazmat.primitives.ciphers.modes",
+        "cryptography.hazmat.primitives.asymmetric",
+        "cryptography.hazmat.primitives.asymmetric.rsa",
+        "cryptography.hazmat.primitives.asymmetric.ec",
+        "cryptography.hazmat.primitives.asymmetric.dsa",
+        "cryptography.hazmat.primitives.asymmetric.padding",
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        "cryptography.hazmat.primitives.asymmetric.ed448",
+        "cryptography.hazmat.primitives.asymmetric.x25519",
+        "cryptography.hazmat.primitives.asymmetric.x448",
+        "cryptography.hazmat.primitives.kdf.pbkdf2",
+        "cryptography.hazmat.primitives.kdf.hkdf",
+        "cryptography.hazmat.primitives.kdf.scrypt",
+        "cryptography.hazmat.primitives.kdf.bcrypt",
+        "cryptography.hazmat.primitives.hmac",
+        "cryptography.fernet"
+      ],
+      "description": "pyca/cryptography — modern Python cryptography library",
+      "type": "pip",
+      "methods": [
+        { "name": "MD5",           "detection": "newExpression", "fixedAlgorithm": "MD5",    "primitive": "hash" },
+        { "name": "SHA1",          "detection": "newExpression", "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "SHA224",        "detection": "newExpression", "fixedAlgorithm": "SHA-224","primitive": "hash" },
+        { "name": "SHA256",        "detection": "newExpression", "fixedAlgorithm": "SHA-256","primitive": "hash" },
+        { "name": "SHA384",        "detection": "newExpression", "fixedAlgorithm": "SHA-384","primitive": "hash" },
+        { "name": "SHA512",        "detection": "newExpression", "fixedAlgorithm": "SHA-512","primitive": "hash" },
+        { "name": "SHA3_256",      "detection": "newExpression", "fixedAlgorithm": "SHA3-256","primitive": "hash" },
+        { "name": "SHA3_512",      "detection": "newExpression", "fixedAlgorithm": "SHA3-512","primitive": "hash" },
+        { "name": "BLAKE2b",       "detection": "newExpression", "fixedAlgorithm": "BLAKE2B","primitive": "hash" },
+        { "name": "BLAKE2s",       "detection": "newExpression", "fixedAlgorithm": "BLAKE2S","primitive": "hash" },
+        { "name": "AES",           "detection": "newExpression", "fixedAlgorithm": "AES",    "primitive": "blockCipher" },
+        { "name": "AES128",        "detection": "newExpression", "fixedAlgorithm": "AES-128","primitive": "blockCipher" },
+        { "name": "AES256",        "detection": "newExpression", "fixedAlgorithm": "AES-256","primitive": "blockCipher" },
+        { "name": "TripleDES",     "detection": "newExpression", "fixedAlgorithm": "3DES",   "primitive": "blockCipher" },
+        { "name": "Blowfish",      "detection": "newExpression", "fixedAlgorithm": "BLOWFISH","primitive": "blockCipher" },
+        { "name": "ChaCha20",      "detection": "newExpression", "fixedAlgorithm": "CHACHA20","primitive": "streamCipher" },
+        { "name": "CBC",           "detection": "newExpression", "fixedAlgorithm": "AES-CBC","primitive": "blockCipher" },
+        { "name": "ECB",           "detection": "newExpression", "fixedAlgorithm": "AES-ECB","primitive": "blockCipher",
+          "notes": "ECB mode leaks data patterns" },
+        { "name": "GCM",           "detection": "newExpression", "fixedAlgorithm": "AES-GCM","primitive": "ae" },
+        { "name": "CTR",           "detection": "newExpression", "fixedAlgorithm": "AES-CTR","primitive": "blockCipher" },
+        { "name": "CFB",           "detection": "newExpression", "fixedAlgorithm": "AES-CFB","primitive": "blockCipher" },
+        { "name": "HMAC",          "detection": "newExpression", "algoArgIndex": 1, "algoPrefix": "HMAC-",
+          "primitive": "mac", "notes": "HMAC(key, algorithm=<hash>, backend=...)" },
+        { "name": "PBKDF2HMAC",    "detection": "newExpression", "algoArgIndex": 0, "algoPrefix": "HMAC-",
+          "primitive": "kdf" },
+        { "name": "HKDF",          "detection": "newExpression", "fixedAlgorithm": "HKDF",   "primitive": "kdf" },
+        { "name": "HKDFExpand",    "detection": "newExpression", "fixedAlgorithm": "HKDF",   "primitive": "kdf" },
+        { "name": "Scrypt",        "detection": "newExpression", "fixedAlgorithm": "SCRYPT",  "primitive": "kdf" },
+        { "name": "generate_private_key", "detection": "memberCall", "algoArgIndex": 0, "primitive": "pke",
+          "notes": "RSA/EC key generation — first arg is key size or curve" },
+        { "name": "SECP256R1",     "detection": "newExpression", "fixedAlgorithm": "P-256",  "primitive": "pke" },
+        { "name": "SECP384R1",     "detection": "newExpression", "fixedAlgorithm": "P-384",  "primitive": "pke" },
+        { "name": "SECP521R1",     "detection": "newExpression", "fixedAlgorithm": "P-521",  "primitive": "pke" },
+        { "name": "SECP256K1",     "detection": "newExpression", "fixedAlgorithm": "SECP256K1","primitive": "pke" },
+        { "name": "Ed25519PrivateKey","detection": "memberCall",  "fixedAlgorithm": "ED25519","primitive": "signature" },
+        { "name": "Ed448PrivateKey","detection": "memberCall",    "fixedAlgorithm": "ED448",  "primitive": "signature" },
+        { "name": "X25519PrivateKey","detection": "memberCall",   "fixedAlgorithm": "X25519", "primitive": "keyAgreement" },
+        { "name": "Fernet",        "detection": "newExpression",  "fixedAlgorithm": "AES-128-CBC-HMAC-SHA256",
+          "primitive": "ae", "notes": "Fernet uses AES-128-CBC + HMAC-SHA256 — secure symmetric encryption" }
+      ]
+    },
+ 
+    "python-jwt": {
+      "language": "python",
+      "aliases": ["jwt", "PyJWT"],
+      "description": "PyJWT — JSON Web Token library for Python",
+      "type": "pip",
+      "methods": [
+        { "name": "encode", "detection": "memberCall", "algoArgIndex": 2, "primitive": "protocol",
+          "notes": "jwt.encode(payload, key, algorithm=...)" },
+        { "name": "decode", "detection": "memberCall", "algoArgIndex": 2, "primitive": "protocol" }
+      ]
+    },
+ 
+    "python-bcrypt": {
+      "language": "python",
+      "aliases": ["bcrypt"],
+      "description": "bcrypt password hashing for Python",
+      "type": "pip",
+      "methods": [
+        { "name": "hashpw",     "detection": "memberCall", "fixedAlgorithm": "BCRYPT", "primitive": "kdf" },
+        { "name": "checkpw",   "detection": "memberCall", "fixedAlgorithm": "BCRYPT", "primitive": "kdf" },
+        { "name": "gensalt",   "detection": "memberCall", "fixedAlgorithm": "BCRYPT", "primitive": "kdf" }
+      ]
+    },
+ 
+    "python-argon2": {
+      "language": "python",
+      "aliases": ["argon2", "argon2_cffi", "argon2.low_level"],
+      "description": "argon2-cffi — Argon2 password hashing for Python",
+      "type": "pip",
+      "methods": [
+        { "name": "PasswordHasher", "detection": "newExpression", "fixedAlgorithm": "ARGON2",  "primitive": "kdf" },
+        { "name": "hash",           "detection": "memberCall",    "fixedAlgorithm": "ARGON2",  "primitive": "kdf" },
+        { "name": "verify",         "detection": "memberCall",    "fixedAlgorithm": "ARGON2",  "primitive": "kdf" },
+        { "name": "hash_secret",    "detection": "memberCall",    "fixedAlgorithm": "ARGON2",  "primitive": "kdf" }
+      ]
+    },
+ 
+    "python-ssl": {
+      "language": "python",
+      "aliases": ["ssl"],
+      "description": "Python standard-library SSL/TLS module",
+      "type": "builtin",
+      "methods": [
+        { "name": "SSLContext",     "detection": "newExpression", "fixedAlgorithm": "TLS",     "primitive": "protocol" },
+        { "name": "wrap_socket",    "detection": "memberCall",    "fixedAlgorithm": "TLS",     "primitive": "protocol" },
+        { "name": "create_default_context", "detection": "memberCall", "fixedAlgorithm": "TLS","primitive": "protocol" }
+      ]
+    },
+
+    "System.Security.Cryptography": {
+      "language": "csharp",
+      "aliases": [
+        "System.Security.Cryptography",
+        "System.Security",
+        "System.Net.Security"
+      ],
+      "description": ".NET System.Security.Cryptography — symmetric, asymmetric, hashing, TLS",
+      "type": "builtin",
+      "methods": [
+        { "name": "HashAlgorithm.Create",          "detection": "staticCall", "algoArgIndex": 0, "primitive": "hash",
+          "notes": "HashAlgorithm.Create(string) — algorithm name as first arg" },
+        { "name": "SymmetricAlgorithm.Create",     "detection": "staticCall", "algoArgIndex": 0, "primitive": "blockCipher" },
+        { "name": "AsymmetricAlgorithm.Create",    "detection": "staticCall", "algoArgIndex": 0, "primitive": "pke" },
+        { "name": "CryptoConfig.CreateFromName",   "detection": "staticCall", "algoArgIndex": 0, "primitive": "other" },
+        { "name": "Aes.Create",                    "detection": "staticCall", "fixedAlgorithm": "AES",     "primitive": "blockCipher" },
+        { "name": "AesCbc.Create",                 "detection": "staticCall", "fixedAlgorithm": "AES-CBC", "primitive": "blockCipher" },
+        { "name": "AesGcm",                        "detection": "newExpression", "fixedAlgorithm": "AES-GCM",  "primitive": "ae" },
+        { "name": "AesCcm",                        "detection": "newExpression", "fixedAlgorithm": "AES-CCM",  "primitive": "ae" },
+        { "name": "AesCryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "AES",    "primitive": "blockCipher" },
+        { "name": "AesManaged",                    "detection": "newExpression", "fixedAlgorithm": "AES",    "primitive": "blockCipher" },
+        { "name": "RijndaelManaged",               "detection": "newExpression", "fixedAlgorithm": "AES",    "primitive": "blockCipher",
+          "notes": "RijndaelManaged is obsolete in .NET 6+ — use Aes.Create() instead" },
+        { "name": "DESCryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "DES",    "primitive": "blockCipher" },
+        { "name": "TripleDESCryptoServiceProvider","detection": "newExpression", "fixedAlgorithm": "3DES",   "primitive": "blockCipher" },
+        { "name": "TripleDES.Create",              "detection": "staticCall",    "fixedAlgorithm": "3DES",   "primitive": "blockCipher" },
+        { "name": "RC2CryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "RC2",    "primitive": "blockCipher" },
+        { "name": "MD5.Create",                    "detection": "staticCall",    "fixedAlgorithm": "MD5",    "primitive": "hash" },
+        { "name": "MD5CryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "MD5",    "primitive": "hash" },
+        { "name": "SHA1.Create",                   "detection": "staticCall",    "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "SHA1Managed",                   "detection": "newExpression", "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "SHA1CryptoServiceProvider",     "detection": "newExpression", "fixedAlgorithm": "SHA-1",  "primitive": "hash" },
+        { "name": "SHA256.Create",                 "detection": "staticCall",    "fixedAlgorithm": "SHA-256","primitive": "hash" },
+        { "name": "SHA256Managed",                 "detection": "newExpression", "fixedAlgorithm": "SHA-256","primitive": "hash" },
+        { "name": "SHA384.Create",                 "detection": "staticCall",    "fixedAlgorithm": "SHA-384","primitive": "hash" },
+        { "name": "SHA512.Create",                 "detection": "staticCall",    "fixedAlgorithm": "SHA-512","primitive": "hash" },
+        { "name": "SHA512Managed",                 "detection": "newExpression", "fixedAlgorithm": "SHA-512","primitive": "hash" },
+        { "name": "HMACMD5",                       "detection": "newExpression", "fixedAlgorithm": "HMAC-MD5",    "primitive": "mac" },
+        { "name": "HMACSHA1",                      "detection": "newExpression", "fixedAlgorithm": "HMAC-SHA1",   "primitive": "mac" },
+        { "name": "HMACSHA256",                    "detection": "newExpression", "fixedAlgorithm": "HMAC-SHA256", "primitive": "mac" },
+        { "name": "HMACSHA384",                    "detection": "newExpression", "fixedAlgorithm": "HMAC-SHA384", "primitive": "mac" },
+        { "name": "HMACSHA512",                    "detection": "newExpression", "fixedAlgorithm": "HMAC-SHA512", "primitive": "mac" },
+        { "name": "RSACryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "RSA",    "primitive": "pke" },
+        { "name": "RSAOpenSsl",                    "detection": "newExpression", "fixedAlgorithm": "RSA",    "primitive": "pke" },
+        { "name": "RSA.Create",                    "detection": "staticCall",    "fixedAlgorithm": "RSA",    "primitive": "pke" },
+        { "name": "DSACryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "DSA",    "primitive": "signature" },
+        { "name": "DSA.Create",                    "detection": "staticCall",    "fixedAlgorithm": "DSA",    "primitive": "signature" },
+        { "name": "ECDsaCng",                      "detection": "newExpression", "fixedAlgorithm": "ECDSA",  "primitive": "signature" },
+        { "name": "ECDsaOpenSsl",                  "detection": "newExpression", "fixedAlgorithm": "ECDSA",  "primitive": "signature" },
+        { "name": "ECDsa.Create",                  "detection": "staticCall",    "algoArgIndex": 0,          "primitive": "signature" },
+        { "name": "ECDiffieHellmanCng",            "detection": "newExpression", "fixedAlgorithm": "ECDH",   "primitive": "keyAgreement" },
+        { "name": "ECDiffieHellman.Create",        "detection": "staticCall",    "fixedAlgorithm": "ECDH",   "primitive": "keyAgreement" },
+        { "name": "ChaCha20Poly1305",              "detection": "newExpression", "fixedAlgorithm": "CHACHA20-POLY1305", "primitive": "ae" },
+        { "name": "Rfc2898DeriveBytes",            "detection": "newExpression", "fixedAlgorithm": "PBKDF2", "primitive": "kdf" },
+        { "name": "PasswordDeriveBytes",           "detection": "newExpression", "fixedAlgorithm": "PBKDF2", "primitive": "kdf",
+          "notes": "PasswordDeriveBytes is obsolete — use Rfc2898DeriveBytes instead" },
+        { "name": "HKDF.DeriveKey",               "detection": "staticCall",    "fixedAlgorithm": "HKDF",   "primitive": "kdf" },
+        { "name": "RandomNumberGenerator.GetBytes","detection": "staticCall",    "fixedAlgorithm": "CSPRNG", "primitive": "prf" },
+        { "name": "RNGCryptoServiceProvider",      "detection": "newExpression", "fixedAlgorithm": "CSPRNG", "primitive": "prf",
+          "notes": "RNGCryptoServiceProvider is obsolete in .NET 6+ — use RandomNumberGenerator.GetBytes()" },
+        { "name": "SSLStream",                     "detection": "newExpression", "fixedAlgorithm": "TLS",    "primitive": "protocol" }
+      ]
+    },
+ 
+    "BouncyCastle.NET": {
+      "language": "csharp",
+      "aliases": [
+        "Org.BouncyCastle",
+        "Org.BouncyCastle.Crypto",
+        "Org.BouncyCastle.Crypto.Engines",
+        "Org.BouncyCastle.Crypto.Digests",
+        "Org.BouncyCastle.Crypto.Macs",
+        "Org.BouncyCastle.Crypto.Generators",
+        "Org.BouncyCastle.Crypto.Agreement",
+        "Org.BouncyCastle.Crypto.Signers",
+        "Org.BouncyCastle.Security",
+        "Org.BouncyCastle.Crypto.Parameters"
+      ],
+      "description": "Bouncy Castle C# crypto library",
+      "type": "nuget",
+      "methods": [
+        { "name": "AesEngine",          "detection": "newExpression", "fixedAlgorithm": "AES",      "primitive": "blockCipher" },
+        { "name": "AesLightEngine",     "detection": "newExpression", "fixedAlgorithm": "AES",      "primitive": "blockCipher" },
+        { "name": "AesWrapEngine",      "detection": "newExpression", "fixedAlgorithm": "AESWRAP_128","primitive": "blockCipher" },
+        { "name": "DesEngine",          "detection": "newExpression", "fixedAlgorithm": "DES",      "primitive": "blockCipher" },
+        { "name": "DesEdeEngine",       "detection": "newExpression", "fixedAlgorithm": "3DES",     "primitive": "blockCipher" },
+        { "name": "RC4Engine",          "detection": "newExpression", "fixedAlgorithm": "RC4",      "primitive": "streamCipher" },
+        { "name": "RC2Engine",          "detection": "newExpression", "fixedAlgorithm": "RC2",      "primitive": "blockCipher" },
+        { "name": "BlowfishEngine",     "detection": "newExpression", "fixedAlgorithm": "BLOWFISH", "primitive": "blockCipher" },
+        { "name": "TwofishEngine",      "detection": "newExpression", "fixedAlgorithm": "TWOFISH",  "primitive": "blockCipher" },
+        { "name": "ChaChaEngine",       "detection": "newExpression", "fixedAlgorithm": "CHACHA20", "primitive": "streamCipher" },
+        { "name": "ChaCha7539Engine",   "detection": "newExpression", "fixedAlgorithm": "CHACHA20", "primitive": "streamCipher" },
+        { "name": "Salsa20Engine",      "detection": "newExpression", "fixedAlgorithm": "SALSA20",  "primitive": "streamCipher" },
+        { "name": "RsaEngine",          "detection": "newExpression", "fixedAlgorithm": "RSA",      "primitive": "pke" },
+        { "name": "RsaBlindedEngine",   "detection": "newExpression", "fixedAlgorithm": "RSA",      "primitive": "pke" },
+        { "name": "MD5Digest",          "detection": "newExpression", "fixedAlgorithm": "MD5",      "primitive": "hash" },
+        { "name": "Sha1Digest",         "detection": "newExpression", "fixedAlgorithm": "SHA-1",    "primitive": "hash" },
+        { "name": "Sha256Digest",       "detection": "newExpression", "fixedAlgorithm": "SHA-256",  "primitive": "hash" },
+        { "name": "Sha512Digest",       "detection": "newExpression", "fixedAlgorithm": "SHA-512",  "primitive": "hash" },
+        { "name": "Sha3Digest",         "detection": "newExpression", "fixedAlgorithm": "SHA3-256", "primitive": "hash" },
+        { "name": "Blake2bDigest",      "detection": "newExpression", "fixedAlgorithm": "BLAKE2B",  "primitive": "hash" },
+        { "name": "HMac",               "detection": "newExpression", "fixedAlgorithm": "HMAC",     "primitive": "mac" },
+        { "name": "Pkcs5S2ParametersGenerator", "detection": "newExpression", "fixedAlgorithm": "PBKDF2","primitive": "kdf" },
+        { "name": "SCryptParametersGenerator",  "detection": "newExpression", "fixedAlgorithm": "SCRYPT", "primitive": "kdf" },
+        { "name": "DHBasicAgreement",   "detection": "newExpression", "fixedAlgorithm": "DH",       "primitive": "keyAgreement" },
+        { "name": "ECDHBasicAgreement", "detection": "newExpression", "fixedAlgorithm": "ECDH",     "primitive": "keyAgreement" },
+        { "name": "ECDsaSigner",        "detection": "newExpression", "fixedAlgorithm": "ECDSA",    "primitive": "signature" },
+        { "name": "DsaSigner",          "detection": "newExpression", "fixedAlgorithm": "DSA",      "primitive": "signature" },
+        { "name": "Ed25519Signer",      "detection": "newExpression", "fixedAlgorithm": "ED25519",  "primitive": "signature" },
+        { "name": "Ed448Signer",        "detection": "newExpression", "fixedAlgorithm": "ED448",    "primitive": "signature" },
+        { "name": "SignerUtilities.GetSigner", "detection": "staticCall", "algoArgIndex": 0, "primitive": "signature" },
+        { "name": "CipherUtilities.GetCipher","detection": "staticCall", "algoArgIndex": 0, "primitive": "blockCipher" },
+        { "name": "DigestUtilities.GetDigest","detection": "staticCall", "algoArgIndex": 0, "primitive": "hash" }
+      ]
+    },
+ 
+    "Microsoft.AspNetCore.DataProtection": {
+      "language": "csharp",
+      "aliases": [
+        "Microsoft.AspNetCore.DataProtection",
+        "Microsoft.AspNetCore.DataProtection.KeyManagement",
+        "Microsoft.AspNetCore.Identity"
+      ],
+      "description": "ASP.NET Core Data Protection and Identity crypto APIs",
+      "type": "nuget",
+      "methods": [
+        { "name": "DataProtectionProvider.Create", "detection": "staticCall",    "fixedAlgorithm": "AES-256-CBC-HMAC-SHA256", "primitive": "ae" },
+        { "name": "PasswordHasher",                "detection": "newExpression", "fixedAlgorithm": "PBKDF2", "primitive": "kdf",
+          "notes": "ASP.NET Core Identity PasswordHasher uses PBKDF2-HMAC-SHA256" }
+      ]
     }
   },
 
   "algorithms": {
+
     "_comment": "Algorithm metadata — severity, quantum safety, CWEs, primitive, cryptoFunctions, classicalSecurityLevel, OID. Every field used by cbomGenerator. No hardcoding needed in code.",
 
     "MD5":          { "weak": true,  "quantumSafe": true,  "severity": "CRITICAL", "cwe": ["CWE-327"], "oid": "1.2.840.113549.2.5",       "primitive": "hash",          "cryptoFunctions": ["digest"],                    "classicalSecurityLevel": 0   },
@@ -1116,7 +1469,17 @@
     "DYNAMIC-ALGO":     { "weak": false, "quantumSafe": true, "severity": "LOW",      "cwe": [],                                           "primitive": "other",         "cryptoFunctions": [],                             "classicalSecurityLevel": 0,  "notes": "Algorithm value is dynamic — could not be resolved statically" },
     "PKCS12": { "weak": false, "quantumSafe": false, "severity": "INFO", "cwe": [], "oid": "1.2.840.113549.1.12", "primitive": "protocol", "cryptoFunctions": ["authenticate"], "classicalSecurityLevel": 128, "notes": "PKCS#12 keystore format — preferred over legacy JKS" },
     "JKS": { "weak": true, "quantumSafe": false, "severity": "MEDIUM", "cwe": ["CWE-327"], "primitive": "protocol", "cryptoFunctions": ["authenticate"], "classicalSecurityLevel": 0, "notes": "JKS uses proprietary encryption and weak SHA-1 integrity — migrate to PKCS12" },
-    "JCEKS": { "weak": false, "quantumSafe": false, "severity": "LOW", "cwe": [], "primitive": "protocol", "cryptoFunctions": ["authenticate"], "classicalSecurityLevel": 112, "notes": "JCEKS is a stronger Sun extension of JKS but still not preferred over PKCS12" }
+    "JCEKS": { "weak": false, "quantumSafe": false, "severity": "LOW", "cwe": [], "primitive": "protocol", "cryptoFunctions": ["authenticate"], "classicalSecurityLevel": 112, "notes": "JCEKS is a stronger Sun extension of JKS but still not preferred over PKCS12" },
+    "SALSA20":    { "weak": false, "quantumSafe": true,  "severity": "INFO",   "cwe": [],
+                    "primitive": "streamCipher", "cryptoFunctions": ["encrypt","decrypt"], "classicalSecurityLevel": 256 },
+    "BLAKE2S":    { "weak": false, "quantumSafe": true,  "severity": "INFO",   "cwe": [],
+                    "primitive": "hash", "cryptoFunctions": ["digest"], "classicalSecurityLevel": 128 },
+    "AES-128-CBC-HMAC-SHA256": { "weak": false, "quantumSafe": true, "severity": "INFO", "cwe": [],
+                    "primitive": "ae", "cryptoFunctions": ["encrypt","decrypt"], "classicalSecurityLevel": 128,
+                    "notes": "Fernet/Data Protection composite authenticated encryption" },
+    "AES-256-CBC-HMAC-SHA256": { "weak": false, "quantumSafe": true, "severity": "INFO", "cwe": [],
+                    "primitive": "ae", "cryptoFunctions": ["encrypt","decrypt"], "classicalSecurityLevel": 256,
+                    "notes": "ASP.NET Core Data Protection composite authenticated encryption" }
 },
 
   "hardcodedPatterns": {

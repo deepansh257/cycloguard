@@ -1,3 +1,9 @@
+/**
+ * src/index.ts — CLI entry point
+ *
+ * Supports JS/TS, Java, Python, and C# scanning with optional CodeQL pass.
+ */
+
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,7 +12,15 @@ import { findFiles, readFile, getRelativePath } from './parser/fileScanner';
 import { parseSource } from './parser/astParser';
 import { runAllDetectors, runCodeQLPass } from './detectors/index';
 import { generateCBOM } from './cbom/cbomGenerator';
-import { buildSummary, printBanner, printScanStart, printProgress, printScanComplete, printFindings, printOutput } from './utils/reporter';
+import {
+  buildSummary,
+  printBanner,
+  printScanStart,
+  printProgress,
+  printScanComplete,
+  printFindings,
+  printOutput,
+} from './utils/reporter';
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
 import { CryptoFinding } from './types';
 
@@ -14,10 +28,25 @@ import { CryptoFinding } from './types';
 import { parseJavaSource } from './parser/javaParser';
 import { detectJava }      from './detectors/java/javaDetector';
 
-const JAVA_EXTENSIONS = ['.java'];
+// ── Python support ────────────────────────────────────────────────────────────
+import { parsePythonSource } from './parser/pythonParser';
+import { detectPython }      from './detectors/python/pythonDetector';
 
-function isJavaFile(filePath: string): boolean {
-  return JAVA_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
+// ── C# support ────────────────────────────────────────────────────────────────
+import { parseCSharpSource } from './parser/csharpParser';
+import { detectCSharp }      from './detectors/csharp/csharpDetector';
+
+// ─── Extension helpers ────────────────────────────────────────────────────────
+
+const JAVA_EXTENSIONS   = new Set(['.java']);
+const PYTHON_EXTENSIONS = new Set(['.py']);
+const CSHARP_EXTENSIONS = new Set(['.cs']);
+
+function isJavaFile(filePath: string):   boolean { return JAVA_EXTENSIONS.has(path.extname(filePath).toLowerCase()); }
+function isPythonFile(filePath: string): boolean { return PYTHON_EXTENSIONS.has(path.extname(filePath).toLowerCase()); }
+function isCSharpFile(filePath: string): boolean { return CSHARP_EXTENSIONS.has(path.extname(filePath).toLowerCase()); }
+function isJsFile(filePath: string):     boolean {
+  return ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs'].includes(path.extname(filePath).toLowerCase());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,7 +55,7 @@ const program = new Command();
 
 program
   .name('cbom-js')
-  .description('CBOM generator for JavaScript / TypeScript / Node.js / Java projects')
+  .description('CBOM generator for JavaScript / TypeScript / Java / Python / C# projects')
   .version('1.0.0')
   .requiredOption('-s, --source <path-or-url>', 'Local directory path or GitHub URL to scan')
   .option('-o, --output <file>', 'Output file path for the CBOM JSON', 'cbom.json')
@@ -36,33 +65,36 @@ program
   .option('-v, --verbose', 'Print all findings including INFO level', false)
   .option('--exclude <patterns>', 'Comma-separated glob patterns to exclude', '')
   .option('--include <patterns>', 'Comma-separated glob patterns to include', '')
-  .option('--codeql',             'Run CodeQL taint analysis after AST scan (requires codeql CLI)')
-  .option('--codeql-path <path>', 'Path to codeql binary (default: codeql on PATH)')
-  .option('--lang <languages>',   'Comma-separated list of languages to scan: js,java (default: auto-detect)', '')
+  .option('--codeql',              'Run CodeQL taint analysis after AST scan (requires codeql CLI)')
+  .option('--codeql-path <path>',  'Path to codeql binary (default: codeql on PATH)')
+  .option('--lang <languages>',
+    'Comma-separated list of languages to scan: js,java,python,csharp (default: auto-detect)', '')
   .action(async (opts) => {
     printBanner();
 
     const options: ScanOptions = {
-      source:          opts.source,
-      output:          opts.output,
-      format:          'cyclonedx',
-      failOnWeak:      opts.failOnWeak,
-      failOnSeverity:  opts.failOnSeverity?.toUpperCase(),
-      verbose:         opts.verbose,
-      branch:          opts.branch,
-      exclude:         opts.exclude ? opts.exclude.split(',').map((s: string) => s.trim()) : [],
-      include:         opts.include ? opts.include.split(',').map((s: string) => s.trim()) : [],
-      useCodeQL:       opts.codeql   ?? false,
-      codeqlPath:      opts.codeqlPath ?? undefined,
+      source:         opts.source,
+      output:         opts.output,
+      format:         'cyclonedx',
+      failOnWeak:     opts.failOnWeak,
+      failOnSeverity: opts.failOnSeverity?.toUpperCase(),
+      verbose:        opts.verbose,
+      branch:         opts.branch,
+      exclude:        opts.exclude ? opts.exclude.split(',').map((s: string) => s.trim()) : [],
+      include:        opts.include ? opts.include.split(',').map((s: string) => s.trim()) : [],
+      useCodeQL:      opts.codeql  ?? false,
+      codeqlPath:     opts.codeqlPath ?? undefined,
     };
 
-    // Parse --lang flag.  Empty = auto-detect (scan both JS and Java files).
-    const langFilter: Set<string> = opts.lang
+    // ── Parse --lang flag.  Empty = auto-detect (scan all languages). ─────────
+    const langFilter = opts.lang
       ? new Set(opts.lang.split(',').map((l: string) => l.trim().toLowerCase()))
-      : new Set(); // empty = no filter = scan everything
+      : new Set<string>(); // empty = no filter = scan everything
 
-    const scanJs   = langFilter.size === 0 || langFilter.has('js') || langFilter.has('ts');
-    const scanJava = langFilter.size === 0 || langFilter.has('java');
+    const scanJs     = langFilter.size === 0 || langFilter.has('js') || langFilter.has('ts');
+    const scanJava   = langFilter.size === 0 || langFilter.has('java');
+    const scanPython = langFilter.size === 0 || langFilter.has('python') || langFilter.has('py');
+    const scanCSharp = langFilter.size === 0 || langFilter.has('csharp') || langFilter.has('cs');
 
     let sourceResult;
     const startTime = Date.now();
@@ -84,15 +116,15 @@ program
 
     const { localPath, projectName, cleanup } = sourceResult;
 
-    // ── Step 2: Discover files ─────────────────────────────────────────────────
-    // Build include globs based on which languages are active.
+    // ── Step 2: Discover files ────────────────────────────────────────────────
     const defaultIncludes: string[] = [
-      ...(scanJs   ? ['**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx', '**/*.mjs', '**/*.cjs'] : []),
-      ...(scanJava ? ['**/*.java'] : []),
+      ...(scanJs     ? ['**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx', '**/*.mjs', '**/*.cjs'] : []),
+      ...(scanJava   ? ['**/*.java'] : []),
+      ...(scanPython ? ['**/*.py']   : []),
+      ...(scanCSharp ? ['**/*.cs']   : []),
     ];
 
-    const includeGlobs =
-      options.include?.length ? options.include : defaultIncludes;
+    const includeGlobs = options.include?.length ? options.include : defaultIncludes;
 
     let files: string[];
     try {
@@ -113,13 +145,17 @@ program
       process.exit(1);
     }
 
-    // Separate JS and Java file lists for reporting clarity
-    const javaFiles = files.filter(isJavaFile);
-    const jsFiles   = files.filter(f => !isJavaFile(f));
+    // ── Separate per-language file lists for reporting ────────────────────────
+    const jsFiles     = files.filter(isJsFile);
+    const javaFiles   = files.filter(isJavaFile);
+    const pythonFiles = files.filter(isPythonFile);
+    const csharpFiles = files.filter(isCSharpFile);
 
     if (options.verbose) {
-      if (jsFiles.length)   console.log(`  JS/TS files found : ${jsFiles.length}`);
-      if (javaFiles.length) console.log(`  Java files found  : ${javaFiles.length}`);
+      if (jsFiles.length)     console.log(`  JS/TS files found  : ${jsFiles.length}`);
+      if (javaFiles.length)   console.log(`  Java files found   : ${javaFiles.length}`);
+      if (pythonFiles.length) console.log(`  Python files found : ${pythonFiles.length}`);
+      if (csharpFiles.length) console.log(`  C# files found     : ${csharpFiles.length}`);
       console.log('');
     }
 
@@ -137,8 +173,8 @@ program
       const source = readFile(filePath);
       if (!source) continue;
 
+      // ── Java ────────────────────────────────────────────────────────────────
       if (isJavaFile(filePath)) {
-        // ── Java branch ──────────────────────────────────────────────────────
         try {
           const javaAst  = parseJavaSource(filePath, source);
           const findings = detectJava(javaAst, filePath, source);
@@ -148,25 +184,58 @@ program
             allErrors.push(`Java parse error in ${filePath}: ${err.message}`);
           }
         }
-      } else {
-        const parsed = parseSource(filePath, source);
-        if (!parsed.ast) {
-          if (options.verbose && parsed.error) {
-            allErrors.push(`Parse error in ${filePath}: ${parsed.error}`);
-          }
-          continue;
-        }
-
-        const { findings, errors } = runAllDetectors(parsed.ast, filePath, source);
-        allFindings.push(...findings);
-        allErrors.push(...errors);
+        continue;
       }
+
+      // ── Python ──────────────────────────────────────────────────────────────
+      if (isPythonFile(filePath)) {
+        try {
+          const pythonAst = parsePythonSource(filePath, source);
+          const findings  = detectPython(pythonAst, filePath, source);
+          allFindings.push(...findings);
+        } catch (err: any) {
+          if (options.verbose) {
+            allErrors.push(`Python parse error in ${filePath}: ${err.message}`);
+          }
+        }
+        continue;
+      }
+
+      // ── C# ──────────────────────────────────────────────────────────────────
+      if (isCSharpFile(filePath)) {
+        try {
+          const csharpAst = parseCSharpSource(filePath, source);
+          const findings  = detectCSharp(csharpAst, filePath, source);
+          allFindings.push(...findings);
+        } catch (err: any) {
+          if (options.verbose) {
+            allErrors.push(`C# parse error in ${filePath}: ${err.message}`);
+          }
+        }
+        continue;
+      }
+
+      // ── JS / TS ─────────────────────────────────────────────────────────────
+      const parsed = parseSource(filePath, source);
+      if (!parsed.ast) {
+        if (options.verbose && parsed.error) {
+          allErrors.push(`Parse error in ${filePath}: ${parsed.error}`);
+        }
+        continue;
+      }
+      const { findings, errors } = runAllDetectors(parsed.ast, filePath, source);
+      allFindings.push(...findings);
+      allErrors.push(...errors);
     }
 
-    // ── Step 3b: CodeQL taint pass (JS/TS only — optional) ───────────────────
+    // ── Step 3b: CodeQL taint pass (all active languages) ────────────────────
     if (options.useCodeQL) {
-      if (jsFiles.length === 0) {
-        console.log('\n  CodeQL skipped — no JS/TS files in this scan.\n');
+      const hasAnyFiles =
+        jsFiles.length > 0 || javaFiles.length > 0 ||
+        pythonFiles.length > 0 || csharpFiles.length > 0;
+
+      if (!hasAnyFiles) {
+        console.log('\n  CodeQL skipped — no supported files in this scan.\n');
       } else {
         console.log('\n  Running CodeQL taint analysis…');
         try {

@@ -15,7 +15,6 @@ import {
   MethodRule
 } from '../registry/registryLoader';
 
-// Tracks which aliases are in scope for a file: alias → packageName
 type AliasMap = Map<string, string>;
 
 export function detectFromRegistry(

@@ -1,17 +1,34 @@
+/**
+ * src/parser/fileScanner.ts
+ *
+ * Discovers source files under a root directory using glob patterns.
+ * Supports JS/TS, Java, Python, and C# out of the box.
+ */
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
 
-const DEFAULT_INCLUDE = [
+// ─── Default patterns ─────────────────────────────────────────────────────────
+
+export const DEFAULT_INCLUDE: string[] = [
+  // JavaScript / TypeScript
   '**/*.js',
   '**/*.ts',
   '**/*.jsx',
   '**/*.tsx',
   '**/*.mjs',
-  '**/*.cjs'
+  '**/*.cjs',
+  // Java
+  '**/*.java',
+  // Python
+  '**/*.py',
+  // C#
+  '**/*.cs',
 ];
 
-const DEFAULT_EXCLUDE = [
+export const DEFAULT_EXCLUDE: string[] = [
+  // JS/TS build artefacts
   '**/node_modules/**',
   '**/dist/**',
   '**/build/**',
@@ -22,27 +39,45 @@ const DEFAULT_EXCLUDE = [
   '**/*.test.js',
   '**/*.spec.js',
   '**/*.test.ts',
-  '**/*.spec.ts'
+  '**/*.spec.ts',
+  // Java build artefacts
+  '**/target/**',
+  '**/out/**',
+  // Python build artefacts
+  '**/__pycache__/**',
+  '**/*.pyc',
+  '**/.venv/**',
+  '**/venv/**',
+  '**/site-packages/**',
+  // C# build artefacts
+  '**/bin/**',
+  '**/obj/**',
+  '**/*.Designer.cs',       // auto-generated WinForms/WPF code
+  '**/*.g.cs',              // Roslyn source generators
+  '**/*.AssemblyInfo.cs',   // auto-generated assembly info
 ];
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 export async function findFiles(
-  rootDir: string,
-  include: string[] = DEFAULT_INCLUDE,
-  exclude: string[] = DEFAULT_EXCLUDE
+  rootDir:  string,
+  include:  string[] = DEFAULT_INCLUDE,
+  exclude?: string[]
 ): Promise<string[]> {
+  const effectiveExclude = exclude?.length ? exclude : DEFAULT_EXCLUDE;
   const files: string[] = [];
 
   for (const pattern of include) {
     const matches = await glob(pattern, {
-      cwd: rootDir,
-      ignore: exclude,
+      cwd:      rootDir,
+      ignore:   effectiveExclude,
       absolute: true,
-      nodir: true
+      nodir:    true,
     });
     files.push(...matches);
   }
 
-  // Deduplicate
+  // Deduplicate and sort for deterministic output
   return [...new Set(files)].sort();
 }
 

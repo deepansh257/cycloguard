@@ -7,11 +7,15 @@ import * as crypto from 'crypto';
 import { getRegistry } from '../registry/registryLoader';
 
 export interface CodeQLRunnerOptions {
-  codeqlPath?: string;
-  sourceRoot: string;
-  jsQueriesDir: string;
-  javaQueriesDir?: string;
-  includeJava?: boolean;
+  codeqlPath?:       string;
+  sourceRoot:        string;
+  jsQueriesDir:      string;
+  javaQueriesDir?:   string;
+  pythonQueriesDir?: string;
+  csharpQueriesDir?: string;
+  includeJava?:      boolean;
+  includePython?:    boolean;
+  includeCSharp?:    boolean;
 }
 
 export interface SARIFResult {
@@ -455,6 +459,467 @@ select initCall,
 `;
 }
 
+// ─── Python query generators ──────────────────────────────────────────────────
+function buildWeakPythonAlgos(): string[] {
+  const registry = getRegistry();
+  const fromRegistry: string[] = [];
+  registry.algorithmMeta.forEach((meta, algoName) => {
+    if (meta.weak) fromRegistry.push(algoName.toLowerCase());
+  });
+
+  const pythonSpellings = [
+    'md5', 'md4', 'sha1', 'sha-1',
+    'des', '3des', 'des3', 'tripledes',
+    'rc2', 'rc4', 'arcfour',
+    'blowfish',
+    'ssl', 'sslv2', 'sslv3',
+    'tlsv1', 'tlsv1.1',
+    'cast5', 'idea',
+  ];
+
+  return [...new Set([...fromRegistry, ...pythonSpellings])].filter(Boolean);
+}
+
+function generatePythonWeakAlgoFlowQuery(): string {
+  const weakAlgos   = buildWeakPythonAlgos();
+  const algoList    = qlStringList(weakAlgos);
+
+  return `/**
+ * @name Python weak cryptographic algorithm via constant propagation
+ * @kind path-problem
+ * @id crypto-python/weak-algo-flow
+ * @severity warning
+ * @tags security cryptography python
+ */
+import python
+import semmle.python.dataflow.new.DataFlow
+import semmle.python.dataflow.new.TaintTracking
+
+private predicate isWeakAlgo(string s) {
+  s = [${algoList}]
+}
+
+private class WeakAlgoSource extends DataFlow::Node {
+  WeakAlgoSource() {
+    exists(StringLiteral sc |
+      isWeakAlgo(sc.getText().toLowerCase()) and
+      this.asExpr() = sc
+    )
+    or
+    exists(AssignStmt a, StringLiteral sc |
+      isWeakAlgo(sc.getText().toLowerCase()) and
+      a.getValue() = sc and
+      this.asExpr() = sc
+    )
+  }
+}
+
+private class PythonCryptoSink extends DataFlow::Node {
+  PythonCryptoSink() {
+    exists(CallNode c |
+      c.getFunction().(AttrNode).getName() = "new" and
+      this.asCfgNode() = c.getArg(0)
+    )
+    or
+    exists(CallNode c |
+      c.getFunction().(NameNode).getId() = "HMAC" and
+      this.asCfgNode() = c.getArg(0)
+    )
+    or
+    exists(CallNode c |
+      c.getFunction().(NameNode).getId() = "Cipher" and
+      this.asCfgNode() = c.getArg(0)
+    )
+  }
+}
+
+module WeakAlgoFlowConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node n) { n instanceof WeakAlgoSource }
+  predicate isSink(DataFlow::Node n)   { n instanceof PythonCryptoSink }
+}
+
+module WeakAlgoFlow = TaintTracking::Global<WeakAlgoFlowConfig>;
+import WeakAlgoFlow::PathGraph
+
+from WeakAlgoFlow::PathNode src, WeakAlgoFlow::PathNode sink
+where WeakAlgoFlow::flowPath(src, sink)
+select sink.getNode(), src, sink,
+  "Weak Python algorithm '$@' flows to crypto operation.", src.getNode(), src.getNode().toString()
+`;
+}
+
+function generatePythonHardcodedSecretFlowQuery(): string {
+  const secretRegex = buildSecretVarPatternFromRegistry();
+
+  return `/**
+ * @name Python hardcoded secret flows to cryptographic operation
+ * @kind path-problem
+ * @id crypto-python/hardcoded-secret-flow
+ * @severity error
+ * @tags security cryptography python
+ */
+import python
+import semmle.python.dataflow.new.DataFlow
+import semmle.python.dataflow.new.TaintTracking
+
+private class HardcodedSecretSource extends DataFlow::Node {
+  HardcodedSecretSource() {
+    exists(AssignStmt a, StringLiteral s, Name target |
+      a.getValue() = s and
+      a.getTarget(0) = target and
+      target.getId().regexpMatch("${secretRegex}") and
+      s.getText().length() >= 8 and
+      not s.getText().matches("%placeholder%") and
+      not s.getText().matches("%TODO%") and
+      not s.getText().matches("%FIXME%") and
+      not s.getText().matches("%$%") and
+      not s.getText().matches("%{%") and
+      this.asExpr() = s
+    )
+  }
+}
+
+private class CryptoKeySink extends DataFlow::Node {
+  CryptoKeySink() {
+    exists(CallNode c |
+      c.getFunction().(AttrNode).getName() = ["new", "sign", "verify", "encrypt", "decrypt"] and
+      this.asCfgNode() = c.getArg(0)
+    )
+    or
+    exists(CallNode c |
+      c.getFunction().(NameNode).getId() = ["HMAC", "Fernet", "Cipher"] and
+      this.asCfgNode() = c.getArg(0)
+    )
+    or
+    exists(CallNode c |
+      c.getFunction().(AttrNode).getName() = "encode" and
+      this.asCfgNode() = c.getArg(1)
+    )
+  }
+}
+
+module HardcodedSecretFlowConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node n) { n instanceof HardcodedSecretSource }
+  predicate isSink(DataFlow::Node n)   { n instanceof CryptoKeySink }
+}
+
+module HardcodedSecretFlow = TaintTracking::Global<HardcodedSecretFlowConfig>;
+import HardcodedSecretFlow::PathGraph
+
+from HardcodedSecretFlow::PathNode src, HardcodedSecretFlow::PathNode sink
+where HardcodedSecretFlow::flowPath(src, sink)
+select sink.getNode(), src, sink,
+  "Hardcoded Python secret '$@' flows to cryptographic operation.", src.getNode(), src.getNode().toString()
+`;
+}
+
+function generatePythonInsecureRandomQuery(): string {
+  return `/**
+ * @name Python insecure random used in security context
+ * @kind problem
+ * @id crypto-python/insecure-random
+ * @severity warning
+ * @tags security cryptography python
+ */
+import python
+
+from CallNode c, AssignStmt a, Name target
+where
+  c.getFunction().(AttrNode).getName() = [
+    "random", "randint", "randrange", "choice", "choices",
+    "sample", "shuffle", "randbytes", "getrandbits"
+  ] and
+  a.getValue() = c.getNode() and
+  a.getTarget(0) = target and
+  target.getId().regexpMatch("(?i).*(token|nonce|salt|key|secret|session|csrf|otp|password|pin|iv|challenge|seed).*")
+select c, "Non-cryptographic random() used to generate security-sensitive value. Use secrets or os.urandom() instead."
+`;
+}
+
+function generatePythonTlsCertValidationQuery(): string {
+  return `/**
+ * @name Python TLS certificate validation disabled
+ * @kind problem
+ * @id crypto-python/tls-cert-validation-disabled
+ * @severity error
+ * @tags security cryptography python tls
+ */
+import python
+
+from CallNode c, Keyword kw
+where
+  kw = c.getNode().(Call).getAKeyword() and
+  kw.getArg() = "verify" and
+  kw.getValue().(BooleanLiteral).booleanValue() = false and
+  c.getFunction().(AttrNode).getName() = [
+    "get", "post", "put", "delete", "patch", "request", "send", "head", "options"
+  ]
+select c, "TLS certificate verification disabled (verify=False). Vulnerable to MITM attacks."
+`;
+}
+
+// ─── C# query generators ──────────────────────────────────────────────────────
+function buildWeakCSharpAlgos(): string[] {
+  const registry = getRegistry();
+  const fromRegistry: string[] = [];
+  registry.algorithmMeta.forEach((meta, algoName) => {
+    if (meta.weak) fromRegistry.push(algoName.toLowerCase());
+  });
+
+  const csharpSpellings = [
+    'md5', 'sha1', 'sha-1',
+    'des', '3des', 'tripledes', 'rc2', 'rc4',
+    'rijndael',
+    'ssl', 'ssl2', 'ssl3',
+    'tls1', 'tlsv1', 'tls 1.0', 'tls 1.1',
+    'md5withrsa', 'sha1withrsa',
+  ];
+
+  return [...new Set([...fromRegistry, ...csharpSpellings])].filter(Boolean);
+}
+
+function generateCSharpWeakAlgoFlowQuery(): string {
+  const weakAlgos = buildWeakCSharpAlgos();
+  const algoList  = qlStringList(weakAlgos);
+
+  return `/**
+ * @name C# weak cryptographic algorithm via constant propagation
+ * @kind path-problem
+ * @id crypto-csharp/weak-algo-flow
+ * @severity warning
+ * @tags security cryptography csharp dotnet
+ */
+import csharp
+import semmle.code.csharp.dataflow.DataFlow
+import semmle.code.csharp.dataflow.TaintTracking
+
+private predicate isWeakAlgo(string s) {
+  s = [${algoList}]
+}
+
+private class WeakAlgoSource extends DataFlow::Node {
+  WeakAlgoSource() {
+    exists(StringLiteral lit |
+      isWeakAlgo(lit.getValue().toLowerCase()) and
+      this.asExpr() = lit
+    )
+    or
+    exists(Field f |
+      isWeakAlgo(f.getInitializer().(StringLiteral).getValue().toLowerCase()) and
+      this.asExpr() = f.getAnAccess()
+    )
+    or
+    exists(LocalVariableDeclExpr lvde |
+      isWeakAlgo(lvde.getInitializer().(StringLiteral).getValue().toLowerCase()) and
+      this.asExpr() = lvde.getVariable().getAnAccess()
+    )
+  }
+}
+
+private class DotNetCryptoSink extends DataFlow::Node {
+  DotNetCryptoSink() {
+    exists(MethodCall mc |
+      mc.getTarget().hasName(["Create", "CreateFromName", "GetCipher", "GetDigest", "GetSigner"]) and
+      mc.getTarget().getDeclaringType().getFullyQualifiedName() in [
+        "System.Security.Cryptography.HashAlgorithm",
+        "System.Security.Cryptography.SymmetricAlgorithm",
+        "System.Security.Cryptography.AsymmetricAlgorithm",
+        "System.Security.Cryptography.CryptoConfig"
+      ] and
+      this.asExpr() = mc.getArgument(0)
+    )
+  }
+}
+
+module WeakAlgoFlowConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node n) { n instanceof WeakAlgoSource }
+  predicate isSink(DataFlow::Node n)   { n instanceof DotNetCryptoSink }
+}
+
+module WeakAlgoFlow = TaintTracking::Global<WeakAlgoFlowConfig>;
+import WeakAlgoFlow::PathGraph
+
+from WeakAlgoFlow::PathNode src, WeakAlgoFlow::PathNode sink
+where WeakAlgoFlow::flowPath(src, sink)
+select sink.getNode(), src, sink,
+  "Weak C# algorithm '$@' flows to .NET crypto API.", src.getNode(), src.getNode().toString()
+`;
+}
+
+function generateCSharpHardcodedSecretFlowQuery(): string {
+  const secretRegex = buildSecretVarPatternFromRegistry();
+
+  return `/**
+ * @name C# hardcoded secret flows to cryptographic operation
+ * @kind path-problem
+ * @id crypto-csharp/hardcoded-secret-flow
+ * @severity error
+ * @tags security cryptography csharp dotnet
+ */
+import csharp
+import semmle.code.csharp.dataflow.DataFlow
+import semmle.code.csharp.dataflow.TaintTracking
+
+private class HardcodedSecretSource extends DataFlow::Node {
+  HardcodedSecretSource() {
+    exists(Field f, StringLiteral lit |
+      f.getName().regexpMatch("${secretRegex}") and
+      f.getInitializer() = lit and
+      lit.getValue().length() >= 8 and
+      not lit.getValue().matches("%$%") and
+      not lit.getValue().matches("%{%") and
+      not lit.getValue().matches("%placeholder%") and
+      not lit.getValue().matches("%TODO%") and
+      not lit.getValue().matches("%FIXME%") and
+      this.asExpr() = lit
+    )
+    or
+    exists(LocalVariableDeclExpr lvde, StringLiteral lit |
+      lvde.getVariable().getName().regexpMatch("${secretRegex}") and
+      lvde.getInitializer() = lit and
+      lit.getValue().length() >= 8 and
+      not lit.getValue().matches("%$%") and
+      not lit.getValue().matches("%placeholder%") and
+      not lit.getValue().matches("%TODO%") and
+      this.asExpr() = lit
+    )
+  }
+}
+
+private class CryptoKeySink extends DataFlow::Node {
+  CryptoKeySink() {
+    exists(AssignExpr ae |
+      ae.getLValue().(PropertyAccess).getProperty().hasName("Key") and
+      ae.getLValue().(PropertyAccess).getProperty().getDeclaringType().getFullyQualifiedName().matches("System.Security.Cryptography.%") and
+      this.asExpr() = ae.getRValue()
+    )
+    or
+    exists(ObjectCreation oc |
+      oc.getType().getFullyQualifiedName().matches("System.Security.Cryptography.HMAC%") and
+      this.asExpr() = oc.getArgument(0)
+    )
+    or
+    exists(ObjectCreation oc |
+      oc.getType().getFullyQualifiedName() in [
+        "System.Security.Cryptography.AesGcm",
+        "System.Security.Cryptography.AesCcm",
+        "System.Security.Cryptography.ChaCha20Poly1305"
+      ] and
+      this.asExpr() = oc.getArgument(0)
+    )
+  }
+}
+
+module HardcodedSecretFlowConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node n) { n instanceof HardcodedSecretSource }
+  predicate isSink(DataFlow::Node n)   { n instanceof CryptoKeySink }
+}
+
+module HardcodedSecretFlow = TaintTracking::Global<HardcodedSecretFlowConfig>;
+import HardcodedSecretFlow::PathGraph
+
+from HardcodedSecretFlow::PathNode src, HardcodedSecretFlow::PathNode sink
+where HardcodedSecretFlow::flowPath(src, sink)
+select sink.getNode(), src, sink,
+  "Hardcoded C# secret '$@' flows to cryptographic operation.", src.getNode(), src.getNode().toString()
+`;
+}
+
+function generateCSharpWeakKeySizeQuery(): string {
+  return `/**
+ * @name C# weak key size in .NET key generation
+ * @kind problem
+ * @id crypto-csharp/weak-key-size
+ * @severity warning
+ * @tags security cryptography csharp dotnet
+ */
+import csharp
+
+from Expr target, string message
+where
+  (
+    exists(ObjectCreation oc, IntLiteral keySizeLit, int keySize |
+      oc.getType().getFullyQualifiedName() in [
+        "System.Security.Cryptography.RSACryptoServiceProvider",
+        "System.Security.Cryptography.RSAOpenSsl"
+      ] and
+      keySizeLit = oc.getArgument(0) and
+      keySize = keySizeLit.getIntValue() and
+      keySize < 2048 and
+      target = oc and
+      message = "RSA key size " + keySize + " bits is below the recommended minimum of 2048 bits."
+    )
+    or
+    exists(ObjectCreation oc, IntLiteral keySizeLit, int keySize |
+      oc.getType().getFullyQualifiedName() in [
+        "System.Security.Cryptography.DSACryptoServiceProvider",
+        "System.Security.Cryptography.DSAOpenSsl"
+      ] and
+      keySizeLit = oc.getArgument(0) and
+      keySize = keySizeLit.getIntValue() and
+      keySize < 2048 and
+      target = oc and
+      message = "DSA key size " + keySize + " bits is below the recommended minimum of 2048 bits."
+    )
+    or
+    exists(AssignExpr ae, IntLiteral keySizeLit, int keySize |
+      ae.getLValue().(PropertyAccess).getProperty().hasName("KeySize") and
+      ae.getLValue().(PropertyAccess).getProperty().getDeclaringType().getFullyQualifiedName() in [
+        "System.Security.Cryptography.ECDsa",
+        "System.Security.Cryptography.ECDiffieHellman",
+        "System.Security.Cryptography.ECDsaCng",
+        "System.Security.Cryptography.ECDiffieHellmanCng"
+      ] and
+      keySizeLit = ae.getRValue() and
+      keySize = keySizeLit.getIntValue() and
+      keySize < 256 and
+      target = ae and
+      message = "EC key size " + keySize + " bits is below the recommended minimum of 256 bits."
+    )
+  )
+select target, message
+`;
+}
+
+function generateCSharpTlsCertValidationQuery(): string {
+  return `/**
+ * @name C# TLS certificate validation disabled
+ * @kind problem
+ * @id crypto-csharp/tls-cert-validation-disabled
+ * @severity error
+ * @tags security cryptography csharp dotnet tls
+ */
+import csharp
+
+from Element target, string message
+where
+  (
+    exists(AssignExpr a |
+      a.getLValue().(PropertyAccess).getProperty().hasName("ServerCertificateValidationCallback") and
+      a.getLValue().(PropertyAccess).getQualifier().(TypeAccess).getType().getFullyQualifiedName() = "System.Net.ServicePointManager" and
+      a.getRValue().(AnonymousFunctionExpr).getExpressionBody().(BoolLiteral).getValue() = "true" and
+      target = a and
+      message = "TLS certificate validation disabled via ServerCertificateValidationCallback returning true."
+    )
+    or
+    exists(AssignExpr a |
+      a.getLValue().(PropertyAccess).getProperty().hasName("ServerCertificateCustomValidationCallback") and
+      a.getRValue().(AnonymousFunctionExpr).getExpressionBody().(BoolLiteral).getValue() = "true" and
+      target = a and
+      message = "TLS certificate validation disabled in HttpClientHandler callback."
+    )
+    or
+    exists(AssignExpr a |
+      a.getLValue().(PropertyAccess).getProperty().hasName("ServerCertificateCustomValidationCallback") and
+      a.getRValue().(PropertyAccess).getProperty().hasName("DangerousAcceptAnyServerCertificateValidator") and
+      target = a and
+      message = "TLS validation bypassed via DangerousAcceptAnyServerCertificateValidator."
+    )
+  )
+select target, message
+`;
+}
+
 // ─── Language detection ───────────────────────────────────────────────────────
 function detectJSInSource(sourceRoot: string): boolean {
   const jsConfigIndicators = ['package.json', 'tsconfig.json', '.eslintrc', '.eslintrc.js', '.eslintrc.json'];
@@ -487,6 +952,57 @@ function detectJavaInSource(sourceRoot: string): boolean {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         if (entry.isFile() && entry.name.endsWith('.java')) return true;
         if (entry.isDirectory() && check(path.join(dir, entry.name), depth + 1)) return true;
+      }
+      return false;
+    };
+    return check(sourceRoot, 0);
+  } catch {
+    return false;
+  }
+}
+
+function detectPythonInSource(sourceRoot: string): boolean {
+  const indicators = ['requirements.txt', 'pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile'];
+  for (const indicator of indicators) {
+    if (fs.existsSync(path.join(sourceRoot, indicator))) return true;
+  }
+  try {
+    const check = (dir: string, depth: number): boolean => {
+      if (depth > 3) return false;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.py')) return true;
+        if (
+          entry.isDirectory() &&
+          entry.name !== '__pycache__' &&
+          entry.name !== '.venv' &&
+          entry.name !== 'venv' &&
+          check(path.join(dir, entry.name), depth + 1)
+        ) return true;
+      }
+      return false;
+    };
+    return check(sourceRoot, 0);
+  } catch {
+    return false;
+  }
+}
+
+function detectCSharpInSource(sourceRoot: string): boolean {
+  const indicators = ['.sln', '.csproj', 'global.json'];
+  for (const indicator of indicators) {
+    if (fs.existsSync(path.join(sourceRoot, indicator))) return true;
+  }
+  try {
+    const check = (dir: string, depth: number): boolean => {
+      if (depth > 3) return false;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isFile() && (entry.name.endsWith('.cs') || entry.name.endsWith('.csproj') || entry.name.endsWith('.sln'))) return true;
+        if (
+          entry.isDirectory() &&
+          entry.name !== 'bin' &&
+          entry.name !== 'obj' &&
+          check(path.join(dir, entry.name), depth + 1)
+        ) return true;
       }
       return false;
     };
@@ -535,7 +1051,10 @@ function saveDbFingerprint(dbDir: string, fingerprint: string): void {
   } catch {}
 }
 
-function getStableDbDir(sourceRoot: string, language: 'javascript' | 'java'): string {
+function getStableDbDir(
+  sourceRoot: string,
+  language: 'javascript' | 'java' | 'python' | 'csharp'
+): string {
   const hash = crypto.createHash('md5').update(sourceRoot).digest('hex').slice(0, 8);
   const baseDir = path.join(os.homedir(), '.cbom-js', 'codeql-dbs');
   fs.mkdirSync(baseDir, { recursive: true });
@@ -544,27 +1063,40 @@ function getStableDbDir(sourceRoot: string, language: 'javascript' | 'java'): st
 
 // ─── qlpack + workspace helpers ───────────────────────────────────────────────
 function getBundledQlpacksDir(codeqlHome: string): string {
-  // Standard layout: codeql-win64/codeql/qlpacks/
   const bundled = path.join(codeqlHome, 'qlpacks');
   if (fs.existsSync(bundled)) return bundled;
-  // Some distributions put them one level up
   const parent = path.join(path.dirname(codeqlHome), 'qlpacks');
   if (fs.existsSync(parent)) return parent;
-  return bundled; // best guess — let CodeQL error naturally
+  return bundled;
 }
 
-function ensureQlPack(dir: string, language: 'javascript' | 'java', codeqlHome: string): void {
-  const dep = language === 'java' ? 'codeql/java-all' : 'codeql/javascript-all';
-  const packName = language === 'java'
-    ? 'cbom-js/crypto-queries-java'
-    : 'cbom-js/crypto-queries-js';
+function ensureQlPack(
+  dir: string,
+  language: 'javascript' | 'java' | 'python' | 'csharp',
+  codeqlHome: string
+): void {
+  const depMap: Record<string, string> = {
+    javascript: 'codeql/javascript-all',
+    java:       'codeql/java-all',
+    python:     'codeql/python-all',
+    csharp:     'codeql/csharp-all',
+  };
+  const nameMap: Record<string, string> = {
+    javascript: 'cbom-js/crypto-queries-js',
+    java:       'cbom-js/crypto-queries-java',
+    python:     'cbom-js/crypto-queries-python',
+    csharp:     'cbom-js/crypto-queries-csharp',
+  };
+
+  const dep      = depMap[language];
+  const packName = nameMap[language];
+  const bundledQlpacks = getBundledQlpacksDir(codeqlHome);
+
   fs.writeFileSync(
     path.join(dir, 'qlpack.yml'),
     `name: ${packName}\nversion: 0.0.1\ndependencies:\n  ${dep}: "*"\n`,
     'utf8'
   );
-
-  const bundledQlpacks = getBundledQlpacksDir(codeqlHome);
   fs.writeFileSync(
     path.join(dir, 'codeql-workspace.yml'),
     `provide:\n  - "${bundledQlpacks.replace(/\\/g, '/')}/**/*.qlpack.yml"\n  - "${bundledQlpacks.replace(/\\/g, '/')}/**/qlpack.yml"\n`,
@@ -573,7 +1105,6 @@ function ensureQlPack(dir: string, language: 'javascript' | 'java', codeqlHome: 
 }
 
 // ─── Async spawn helper ───────────────────────────────────────────────────────
-
 function spawnAsync(
   bin: string,
   args: string[],
@@ -588,7 +1119,7 @@ function spawnAsync(
     child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
     child.stderr.on('data', (d: Buffer) => {
       stderr += d.toString();
-      process.stdout.write(d); // stream progress live
+      process.stdout.write(d);
     });
 
     let timedOut = false;
@@ -616,7 +1147,6 @@ function spawnAsync(
 }
 
 // ─── Main runner ──────────────────────────────────────────────────────────────
-
 export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[]> {
   const codeqlPackageCache = path.join(os.homedir(), '.codeql', 'packages');
   let codeqlBin = opts.codeqlPath ?? 'codeql';
@@ -626,19 +1156,23 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
   const codeqlHome = path.dirname(codeqlBin);
 
   isCodeQLAvailable(codeqlBin);
-  const jsQueriesDir   = opts.jsQueriesDir;
-  const javaQueriesDir = opts.javaQueriesDir
-    ?? path.join(path.dirname(opts.jsQueriesDir), 'java');
-  const generatedBase  = path.join(path.dirname(opts.jsQueriesDir), '_generated');
+
+  const jsQueriesDir     = opts.jsQueriesDir;
+  const javaQueriesDir   = opts.javaQueriesDir   ?? path.join(path.dirname(opts.jsQueriesDir), 'java');
+  const pythonQueriesDir = opts.pythonQueriesDir  ?? path.join(path.dirname(opts.jsQueriesDir), 'python');
+  const csharpQueriesDir = opts.csharpQueriesDir  ?? path.join(path.dirname(opts.jsQueriesDir), 'csharp');
+  const generatedBase    = path.join(path.dirname(opts.jsQueriesDir), '_generated');
 
   const sourceRoot = opts.sourceRoot.replace(/\\/g, '/');
   const allResults: SARIFResult[] = [];
 
-  const hasJS   = detectJSInSource(opts.sourceRoot);
-  const hasJava = opts.includeJava ?? detectJavaInSource(opts.sourceRoot);
+  const hasJS     = detectJSInSource(opts.sourceRoot);
+  const hasJava   = opts.includeJava    ?? detectJavaInSource(opts.sourceRoot);
+  const hasPython = opts.includePython  ?? detectPythonInSource(opts.sourceRoot);
+  const hasCSharp = opts.includeCSharp  ?? detectCSharpInSource(opts.sourceRoot);
 
-  if (!hasJS && !hasJava) {
-    console.log('No JS/TS or Java source files detected — skipping CodeQL analysis.');
+  if (!hasJS && !hasJava && !hasPython && !hasCSharp) {
+    console.log('No supported source files detected — skipping CodeQL analysis.');
     return [];
   }
 
@@ -652,24 +1186,23 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
     const jsGeneratedDir = path.join(generatedBase, 'js');
     fs.mkdirSync(jsGeneratedDir, { recursive: true });
     ensureQlPack(jsGeneratedDir, 'javascript', codeqlHome);
+
     const regPath  = path.join(jsGeneratedDir, `js-registry-${ts}.ql`);
     const weakPath = path.join(jsGeneratedDir, `js-weakalgo-${ts}.ql`);
     fs.writeFileSync(regPath,  generateRegistryDrivenQuery(), 'utf8');
     fs.writeFileSync(weakPath, generateWeakAlgoQuery(),       'utf8');
 
     const staticJsQueries = fs.existsSync(jsQueriesDir)
-      ? fs.readdirSync(jsQueriesDir)
-          .filter(f => f.endsWith('.ql'))
-          .map(f => path.join(jsQueriesDir, f))
+      ? fs.readdirSync(jsQueriesDir).filter(f => f.endsWith('.ql')).map(f => path.join(jsQueriesDir, f))
       : [];
-
     const jsQueries = [regPath, weakPath, ...staticJsQueries];
-    const jsDbDir   = getStableDbDir(opts.sourceRoot, 'javascript');
-    const jsSarif   = path.join(jsGeneratedDir, `js-results-${ts}.sarif`);
+
+    const jsDbDir  = getStableDbDir(opts.sourceRoot, 'javascript');
+    const jsSarif  = path.join(jsGeneratedDir, `js-results-${ts}.sarif`);
 
     try {
       if (isDbReusable(jsDbDir, fingerprint)) {
-        console.log(`  Reusing existing JS/TS CodeQL DB (no code changes detected).`);
+        console.log('  Reusing existing JS/TS CodeQL DB (no code changes detected).');
       } else {
         console.log('  Creating CodeQL JS/TS database...');
         const dbResult = await spawnAsync(
@@ -684,10 +1217,8 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           ],
           { timeout: 15 * 60 * 1000, label: 'JS DB' }
         );
-
         if (dbResult.status !== 0) {
           console.warn('  WARNING: JS/TS CodeQL DB creation failed:\n', dbResult.stderr.slice(-1000));
-          // Clean up partial DB so next run retries from scratch
           safeRm(jsDbDir);
         } else {
           saveDbFingerprint(jsDbDir, fingerprint);
@@ -709,7 +1240,6 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           ],
           { timeout: 20 * 60 * 1000, label: 'JS Analyze' }
         );
-
         if (analyzeResult.status === 0 && fs.existsSync(jsSarif)) {
           const sarif = JSON.parse(fs.readFileSync(jsSarif, 'utf8'));
           const jsFindings = parseSARIF(sarif, opts.sourceRoot);
@@ -734,7 +1264,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
     ensureQlPack(javaGeneratedDir, 'java', codeqlHome);
 
     const javaQueryDefs: Array<{ name: string; content: string }> = [
-      { name: `java-weak-algo-flow-${ts}.ql`,        content: generateJavaWeakAlgoFlowQuery()        },
+      { name: `java-weak-algo-flow-${ts}.ql`,        content: generateJavaWeakAlgoFlowQuery()         },
       { name: `java-hardcoded-field-${ts}.ql`,       content: generateJavaHardcodedFieldSecretQuery() },
       { name: `java-weak-secretkeyspec-${ts}.ql`,    content: generateJavaWeakSecretKeySpecQuery()    },
       { name: `java-hardcoded-secret-flow-${ts}.ql`, content: generateJavaHardcodedSecretFlowQuery()  },
@@ -748,18 +1278,16 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
       javaQueryPaths.push(qPath);
     }
     const staticJavaQueries = fs.existsSync(javaQueriesDir)
-      ? fs.readdirSync(javaQueriesDir)
-          .filter(f => f.endsWith('.ql'))
-          .map(f => path.join(javaQueriesDir, f))
+      ? fs.readdirSync(javaQueriesDir).filter(f => f.endsWith('.ql')).map(f => path.join(javaQueriesDir, f))
       : [];
     javaQueryPaths.push(...staticJavaQueries);
 
-    const javaDbDir  = getStableDbDir(opts.sourceRoot, 'java');
-    const javaSarif  = path.join(javaGeneratedDir, `java-results-${ts}.sarif`);
+    const javaDbDir = getStableDbDir(opts.sourceRoot, 'java');
+    const javaSarif = path.join(javaGeneratedDir, `java-results-${ts}.sarif`);
 
     try {
       if (isDbReusable(javaDbDir, fingerprint)) {
-        console.log(`  Reusing existing Java CodeQL DB (no code changes detected).`);
+        console.log('  Reusing existing Java CodeQL DB (no code changes detected).');
       } else {
         console.log('  Creating CodeQL Java database (this may take several minutes for large repos)...');
         const javaDbResult = await spawnAsync(
@@ -775,7 +1303,6 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           ],
           { timeout: 45 * 60 * 1000, label: 'Java DB' }
         );
-
         if (javaDbResult.status !== 0) {
           console.warn(
             '  WARNING: Java CodeQL DB creation failed. ' +
@@ -804,7 +1331,6 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           ],
           { timeout: 20 * 60 * 1000, label: 'Java Analyze' }
         );
-
         if (javaAnalyzeResult.status === 0 && fs.existsSync(javaSarif)) {
           const sarif = JSON.parse(fs.readFileSync(javaSarif, 'utf8'));
           const javaFindings = parseSARIF(sarif, opts.sourceRoot);
@@ -817,6 +1343,182 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
     } finally {
       for (const qPath of javaQueryPaths) {
         if (qPath.startsWith(javaGeneratedDir)) safeRm(qPath);
+      }
+    }
+  }
+
+  // ── Python block ─────────────────────────────────────────────────────────────
+  if (hasPython) {
+    console.log('\nCodeQL: Python source detected — running Python crypto queries...');
+
+    const pythonGeneratedDir = path.join(generatedBase, 'python');
+    fs.mkdirSync(pythonGeneratedDir, { recursive: true });
+    ensureQlPack(pythonGeneratedDir, 'python', codeqlHome);
+
+    const pythonQueryDefs: Array<{ name: string; content: string }> = [
+      { name: `python-weak-algo-flow-${ts}.ql`,       content: generatePythonWeakAlgoFlowQuery()       },
+      { name: `python-hardcoded-secret-${ts}.ql`,     content: generatePythonHardcodedSecretFlowQuery() },
+      { name: `python-insecure-random-${ts}.ql`,      content: generatePythonInsecureRandomQuery()      },
+      { name: `python-tls-cert-validation-${ts}.ql`,  content: generatePythonTlsCertValidationQuery()   },
+    ];
+
+    const pythonQueryPaths: string[] = [];
+    for (const q of pythonQueryDefs) {
+      const qPath = path.join(pythonGeneratedDir, q.name);
+      fs.writeFileSync(qPath, q.content, 'utf8');
+      pythonQueryPaths.push(qPath);
+    }
+    const staticPythonQueries = fs.existsSync(pythonQueriesDir)
+      ? fs.readdirSync(pythonQueriesDir).filter(f => f.endsWith('.ql')).map(f => path.join(pythonQueriesDir, f))
+      : [];
+    pythonQueryPaths.push(...staticPythonQueries);
+
+    const pythonDbDir = getStableDbDir(opts.sourceRoot, 'python');
+    const pythonSarif = path.join(pythonGeneratedDir, `python-results-${ts}.sarif`);
+
+    try {
+      if (isDbReusable(pythonDbDir, fingerprint)) {
+        console.log('  Reusing existing Python CodeQL DB (no code changes detected).');
+      } else {
+        console.log('  Creating CodeQL Python database...');
+        const pythonDbResult = await spawnAsync(
+          codeqlBin,
+          [
+            'database', 'create', pythonDbDir,
+            '--language=python',
+            '--source-root', sourceRoot,
+            '--overwrite',
+            `--search-path=${codeqlHome}`,
+            `--search-path=${codeqlPackageCache}`,
+          ],
+          { timeout: 20 * 60 * 1000, label: 'Python DB' }
+        );
+        if (pythonDbResult.status !== 0) {
+          console.warn('  WARNING: Python CodeQL DB creation failed:\n', pythonDbResult.stderr.slice(-1000));
+          safeRm(pythonDbDir);
+        } else {
+          saveDbFingerprint(pythonDbDir, fingerprint);
+        }
+      }
+
+      if (fs.existsSync(pythonDbDir)) {
+        console.log(`  Running Python CodeQL analysis (${pythonQueryPaths.length} queries)...`);
+        const pythonAnalyzeResult = await spawnAsync(
+          codeqlBin,
+          [
+            'database', 'analyze', pythonDbDir,
+            ...pythonQueryPaths,
+            '--format=sarifv2.1.0',
+            `--output=${pythonSarif}`,
+            `--search-path=${codeqlHome}`,
+            `--search-path=${getBundledQlpacksDir(codeqlHome)}`,
+            `--search-path=${codeqlPackageCache}`,
+          ],
+          { timeout: 20 * 60 * 1000, label: 'Python Analyze' }
+        );
+        if (pythonAnalyzeResult.status === 0 && fs.existsSync(pythonSarif)) {
+          const sarif = JSON.parse(fs.readFileSync(pythonSarif, 'utf8'));
+          const pythonFindings = parseSARIF(sarif, opts.sourceRoot);
+          allResults.push(...pythonFindings);
+          console.log(`  Python CodeQL: ${pythonFindings.length} finding(s)`);
+        } else if (pythonAnalyzeResult.status !== 0) {
+          console.warn('  WARNING: Python analysis failed:\n', pythonAnalyzeResult.stderr.slice(-1000));
+        }
+      }
+    } finally {
+      for (const qPath of pythonQueryPaths) {
+        if (qPath.startsWith(pythonGeneratedDir)) safeRm(qPath);
+      }
+    }
+  }
+
+  // ── C# block ─────────────────────────────────────────────────────────────────
+  if (hasCSharp) {
+    console.log('\nCodeQL: C# source detected — running C# crypto queries...');
+
+    const csharpGeneratedDir = path.join(generatedBase, 'csharp');
+    fs.mkdirSync(csharpGeneratedDir, { recursive: true });
+    ensureQlPack(csharpGeneratedDir, 'csharp', codeqlHome);
+
+    const csharpQueryDefs: Array<{ name: string; content: string }> = [
+      { name: `csharp-weak-algo-flow-${ts}.ql`,       content: generateCSharpWeakAlgoFlowQuery()       },
+      { name: `csharp-hardcoded-secret-${ts}.ql`,     content: generateCSharpHardcodedSecretFlowQuery() },
+      { name: `csharp-weak-key-size-${ts}.ql`,        content: generateCSharpWeakKeySizeQuery()         },
+      { name: `csharp-tls-cert-validation-${ts}.ql`,  content: generateCSharpTlsCertValidationQuery()   },
+    ];
+
+    const csharpQueryPaths: string[] = [];
+    for (const q of csharpQueryDefs) {
+      const qPath = path.join(csharpGeneratedDir, q.name);
+      fs.writeFileSync(qPath, q.content, 'utf8');
+      csharpQueryPaths.push(qPath);
+    }
+    const staticCSharpQueries = fs.existsSync(csharpQueriesDir)
+      ? fs.readdirSync(csharpQueriesDir).filter(f => f.endsWith('.ql')).map(f => path.join(csharpQueriesDir, f))
+      : [];
+    csharpQueryPaths.push(...staticCSharpQueries);
+
+    const csharpDbDir = getStableDbDir(opts.sourceRoot, 'csharp');
+    const csharpSarif = path.join(csharpGeneratedDir, `csharp-results-${ts}.sarif`);
+
+    try {
+      if (isDbReusable(csharpDbDir, fingerprint)) {
+        console.log('  Reusing existing C# CodeQL DB (no code changes detected).');
+      } else {
+        console.log('  Creating CodeQL C# database (may require dotnet build for older targets)...');
+        const csharpDbResult = await spawnAsync(
+          codeqlBin,
+          [
+            'database', 'create', csharpDbDir,
+            '--language=csharp',
+            '--source-root', sourceRoot,
+            '--overwrite',
+            '--build-mode=none',
+            `--search-path=${codeqlHome}`,
+            `--search-path=${codeqlPackageCache}`,
+          ],
+          { timeout: 45 * 60 * 1000, label: 'CSharp DB' }
+        );
+        if (csharpDbResult.status !== 0) {
+          console.warn(
+            '  WARNING: C# CodeQL DB creation failed. ' +
+            'If the repo requires compilation, ensure dotnet SDK is available ' +
+            'or remove --build-mode=none to allow autobuilding.\n',
+            csharpDbResult.stderr.slice(-2000)
+          );
+          safeRm(csharpDbDir);
+        } else {
+          saveDbFingerprint(csharpDbDir, fingerprint);
+        }
+      }
+
+      if (fs.existsSync(csharpDbDir)) {
+        console.log(`  Running C# CodeQL analysis (${csharpQueryPaths.length} queries)...`);
+        const csharpAnalyzeResult = await spawnAsync(
+          codeqlBin,
+          [
+            'database', 'analyze', csharpDbDir,
+            ...csharpQueryPaths,
+            '--format=sarifv2.1.0',
+            `--output=${csharpSarif}`,
+            `--search-path=${codeqlHome}`,
+            `--search-path=${getBundledQlpacksDir(codeqlHome)}`,
+            `--search-path=${codeqlPackageCache}`,
+          ],
+          { timeout: 20 * 60 * 1000, label: 'CSharp Analyze' }
+        );
+        if (csharpAnalyzeResult.status === 0 && fs.existsSync(csharpSarif)) {
+          const sarif = JSON.parse(fs.readFileSync(csharpSarif, 'utf8'));
+          const csharpFindings = parseSARIF(sarif, opts.sourceRoot);
+          allResults.push(...csharpFindings);
+          console.log(`  C# CodeQL: ${csharpFindings.length} finding(s)`);
+        } else if (csharpAnalyzeResult.status !== 0) {
+          console.warn('  WARNING: C# analysis failed:\n', csharpAnalyzeResult.stderr.slice(-1000));
+        }
+      }
+    } finally {
+      for (const qPath of csharpQueryPaths) {
+        if (qPath.startsWith(csharpGeneratedDir)) safeRm(qPath);
       }
     }
   }
