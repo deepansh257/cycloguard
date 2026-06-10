@@ -1,25 +1,6 @@
-/**
- * src/parser/javaParser.ts
- *
- * Parses Java source files into a tree-sitter AST and exposes the same
- * helper surface that astParser.ts provides for JS/TS — so Java detectors
- * can be written in an identical style to the existing JS detectors.
- *
- * Dependencies (add to package.json):
- *   "tree-sitter":      "^0.25.0"
- *   "tree-sitter-java": "^0.23.5"
- *
- * Install: npm install tree-sitter tree-sitter-java
- */
-
 import Parser from 'tree-sitter';
-// tree-sitter-java ships a pre-built native binding — no extra build step.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const Java = require('tree-sitter-java');
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-/** A tree-sitter SyntaxNode (subset of fields we actually use). */
 export interface JavaNode {
   type: string;
   text: string;
@@ -32,7 +13,6 @@ export interface JavaNode {
   childForFieldName(name: string): JavaNode | null;
 }
 
-/** Visitor map passed to traverseJavaAST. */
 export type JavaVisitors = Partial<Record<string, (node: JavaNode) => void>>;
 
 // ─── Singleton parser ─────────────────────────────────────────────────────────
@@ -47,18 +27,10 @@ function getParser(): Parser {
   return _parser;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Parse a Java source string and return the root tree-sitter node.
- * Mirrors: astParser.parseSource(filePath, source)
- */
 export function parseJavaSource(filePath: string, source: string): JavaNode {
   const parser = getParser();
   const tree = parser.parse(source);
   if (tree.rootNode.hasError) {
-    // Non-fatal — tree-sitter recovers gracefully from syntax errors.
-    // We log at debug level only; detectors will still find most patterns.
     process.stderr.write(
       `[javaParser] Parse warning: syntax errors in ${filePath}\n`
     );
@@ -66,10 +38,6 @@ export function parseJavaSource(filePath: string, source: string): JavaNode {
   return tree.rootNode as unknown as JavaNode;
 }
 
-/**
- * Walk every node in the tree, calling the matching visitor by node type.
- * Mirrors: astParser.traverseAST(ast, visitors)
- */
 export function traverseJavaAST(
   node: JavaNode,
   visitors: JavaVisitors
@@ -81,12 +49,6 @@ export function traverseJavaAST(
   }
 }
 
-// ─── Helper utilities (mirrors astParser helpers) ─────────────────────────────
-
-/**
- * Returns the trimmed text of a node — equivalent to getStringValue for
- * string literals; strips surrounding quotes.
- */
 export function getStringValue(node: JavaNode | null): string | null {
   if (!node) return null;
   if (node.type === 'string_literal') {
@@ -96,9 +58,6 @@ export function getStringValue(node: JavaNode | null): string | null {
   return null;
 }
 
-/**
- * Returns the numeric value of an integer/decimal literal node.
- */
 export function getNumberValue(node: JavaNode | null): number | null {
   if (!node) return null;
   if (
@@ -112,10 +71,6 @@ export function getNumberValue(node: JavaNode | null): number | null {
   return null;
 }
 
-/**
- * Extract the source snippet for a node (up to 200 chars).
- * Mirrors: astParser.getSnippet
- */
 export function getSnippet(source: string, node: JavaNode): string {
   const start = node.startPosition;
   const lines = source.split('\n');
@@ -123,19 +78,10 @@ export function getSnippet(source: string, node: JavaNode): string {
   return line.trim().slice(0, 200);
 }
 
-/**
- * 1-based line number for a node.
- */
 export function getLine(node: JavaNode): number {
   return node.startPosition.row + 1;
 }
 
-/**
- * True when a method_invocation node matches object.method(...)
- * e.g. isMemberCall(node, 'MessageDigest', 'getInstance')
- *
- * Mirrors: astParser.isMemberCall
- */
 export function isMemberCall(
   node: JavaNode,
   objectName: string,
@@ -149,37 +95,24 @@ export function isMemberCall(
   const obj = node.childForFieldName('object');
   if (!obj) return false;
 
-  // Handle both direct names (MessageDigest.getInstance) and variable refs
   return obj.text === objectName || obj.text.endsWith(`.${objectName}`);
 }
 
-/**
- * Collect all import declarations in a file as a Set of fully-qualified names.
- * e.g.  "javax.crypto.Cipher", "org.bouncycastle.crypto.engines.AESEngine"
- */
 export function collectImports(root: JavaNode): Set<string> {
   const imports = new Set<string>();
   traverseJavaAST(root, {
     import_declaration(node) {
-      // text is like: "import javax.crypto.Cipher;"
       const raw = node.text.replace(/^import\s+/, '').replace(/;$/, '').trim();
-      // strip static keyword
       imports.add(raw.replace(/^static\s+/, ''));
     },
   });
   return imports;
 }
 
-/**
- * Collect all local variable declarations of a given type into a Map of
- * variableName → initialiser node.  Used to resolve chained calls like:
- *   MessageDigest md = MessageDigest.getInstance("MD5");
- *   md.update(data);   // ← need to know md is a MessageDigest
- */
 export function collectVariableTypes(
   root: JavaNode
 ): Map<string, string> {
-  const vars = new Map<string, string>(); // varName → declared type
+  const vars = new Map<string, string>(); 
   traverseJavaAST(root, {
     local_variable_declaration(node) {
       const typeNode = node.childForFieldName('type');
