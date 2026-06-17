@@ -25,11 +25,19 @@ if (!reportDir || !runUrl || !output) {
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
 const issueResult = readJsonIfExists(path.join(reportDir, 'issue-result.json'), { mode: 'skipped' });
+const remediationResult = readJsonIfExists(path.join(reportDir, 'remediation-result.json'), { mode: 'skipped' });
+const prResult = readJsonIfExists(path.join(reportDir, 'pr-result.json'), { mode: 'skipped' });
 const counts = gate.counts || {};
 const status = gate.gate_failed ? 'FAILED' : 'PASSED';
 const issueText = issueResult.issue_url
   ? `*GitHub issue:* ${issueResult.issue_url}`
   : '*GitHub issue:* Not created (High/Critical not found or integration disabled)';
+const prText = prResult.pr_url
+  ? `*Remediation PR:* ${prResult.pr_url} (manual review required)`
+  : `*Remediation PR:* Not created (${remediationResult.reason || prResult.reason || 'remediation not attempted'})`;
+const remediationText = remediationResult.mode === 'completed'
+  ? `*AI remediation:* attempted on branch ${remediationResult.remediation_branch || 'unknown'}`
+  : `*AI remediation:* ${remediationResult.reason || 'not attempted'}`;
 
 const payload = {
   text: `CycloGuard security pipeline ${status}`,
@@ -52,6 +60,8 @@ const payload = {
       }
     },
     { type: 'section', text: { type: 'mrkdwn', text: issueText } },
+    { type: 'section', text: { type: 'mrkdwn', text: remediationText } },
+    { type: 'section', text: { type: 'mrkdwn', text: prText } },
     { type: 'section', text: { type: 'mrkdwn', text: `*Run:* ${runUrl}` } },
     { type: 'section', text: { type: 'mrkdwn', text: '*Reports:* Attached in workflow artifacts' } }
   ]

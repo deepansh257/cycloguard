@@ -72,9 +72,7 @@ function getOriginUrl(repoDir: string): string | null {
   }
 }
 
-export function resolveGithubRepoIdentifier(source: string, repoRoot: string, override?: string): string | null {
-  if (override) return override;
-
+export function resolveSourceGithubRepoIdentifier(source: string, repoRoot: string): string | null {
   if (isGithubUrl(source)) {
     return parseGithubRepoFromUrl(source);
   }
@@ -82,6 +80,11 @@ export function resolveGithubRepoIdentifier(source: string, repoRoot: string, ov
   const originUrl = getOriginUrl(repoRoot);
   if (!originUrl) return null;
   return parseGithubRepoFromUrl(originUrl);
+}
+
+export function resolveGithubRepoIdentifier(source: string, repoRoot: string, override?: string): string | null {
+  if (override) return override;
+  return resolveSourceGithubRepoIdentifier(source, repoRoot);
 }
 
 export function acquireSource(args: Args): { repoRoot: string; cleanup?: () => void } {

@@ -7,13 +7,17 @@ import * as fs from "fs";
 import * as https from "https";
 import * as path from "path";
 import { runNodeScript } from "../core/shell";
-import { Args } from "../types";
+import { runRemediationWorkflow } from "../remediation/workflow";
+import { Args, ProjectTarget } from "../types";
 
 type AutomationOptions = {
+  repoRoot: string;
   outputDir: string;
   sourceRepoLabel: string;
   sourceBranch: string;
   historyFile: string;
+  targets: ProjectTarget[];
+  remediationRepo?: string;
 };
 
 function postJson(url: string, payload: unknown): Promise<void> {
@@ -70,6 +74,32 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
     }, null, 2), "utf-8");
   }
 
+  if (args.enableRemediation) {
+    runRemediationWorkflow({
+      repoRoot: opts.repoRoot,
+      outputDir: opts.outputDir,
+      args,
+      sourceRepo: opts.sourceRepoLabel,
+      sourceBranch: opts.sourceBranch,
+      githubRepo: opts.remediationRepo
+    }, opts.targets);
+  } else {
+    const remediationResult = path.join(opts.outputDir, "remediation-result.json");
+    const prResult = path.join(opts.outputDir, "pr-result.json");
+    if (!fs.existsSync(remediationResult)) {
+      fs.writeFileSync(remediationResult, JSON.stringify({
+        mode: "skipped",
+        reason: "remediation_disabled"
+      }, null, 2), "utf-8");
+    }
+    if (!fs.existsSync(prResult)) {
+      fs.writeFileSync(prResult, JSON.stringify({
+        mode: "skipped",
+        reason: "remediation_disabled"
+      }, null, 2), "utf-8");
+    }
+  }
+
   if (args.enableSlack) {
     runNodeScript(path.join(scriptsDir, "build_slack_payload.js"), [
       "--report-dir", opts.outputDir,
@@ -95,5 +125,11 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
     "--source-repo", opts.sourceRepoLabel,
     "--source-branch", opts.sourceBranch,
     "--history-file", opts.historyFile
+  ]);
+
+  runNodeScript(path.resolve(__dirname, "..", "..", "..", "remediation-core", "build_remediation_summary.js"), [
+    "--source-type", "sbom",
+    "--report-dir", opts.outputDir,
+    "--output", path.join(opts.outputDir, "remediation-summary.json")
   ]);
 }

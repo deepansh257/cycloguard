@@ -22,6 +22,12 @@ It combines two scanning engines:
   - [Download CodeQL](#download-codeql)
   - [Install Query Pack Dependencies](#install-query-pack-dependencies)
   - [Running with CodeQL](#running-with-codeql)
+- [Remediation Flow](#remediation-flow)
+  - [Shared Environment Setup](#shared-environment-setup)
+  - [Running CBOM Remediation](#running-cbom-remediation)
+  - [How AI Is Used](#how-ai-is-used)
+  - [Remediation Artifacts](#remediation-artifacts)
+  - [GitHub Actions Remediation Workflow](#github-actions-remediation-workflow)
 - [Caching](#caching)
   - [Repository Cache](#repository-cache)
   - [CodeQL Database Cache](#codeql-database-cache)
@@ -199,6 +205,125 @@ npx ts-node src/index.ts \
 > The first run will be slow (2–5 minutes for a large repo) because it builds the CodeQL database. Subsequent runs reuse the cached database and complete much faster — see [Caching](#caching).
 
 ---
+
+## Remediation Flow
+
+### Shared Environment Setup
+
+CBOM remediation uses the shared CycloGuard root `.env` file so that both `sbom` and `cbom` can reuse the same credentials and model settings.
+
+Typical variables used by CBOM remediation:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o-mini
+API_GITHUB_TOKEN=your_github_token
+GITHUB_TARGET_REPO=owner/repo
+GIT_USER_NAME=CycloGuard Bot
+GIT_USER_EMAIL=cycloguard-bot@example.com
+```
+
+Notes:
+- The real `.env` should be placed in the CycloGuard repo root.
+- A safe template is available in the root `.env.example`.
+- If `OPENAI_API_KEY` is missing, the planner falls back to non-AI behavior and records that in the remediation artifacts.
+
+### Running CBOM Remediation
+
+CBOM remediation is report-driven. First generate a CBOM report, then run remediation against that report.
+
+Generate the report:
+
+```bash
+cd cbom
+npx ts-node src/index.ts \
+  --source https://github.com/org/repo.git \
+  --branch main \
+  --output ../cbom-report.json
+```
+
+Run remediation:
+
+```bash
+npm run remediate -- \
+  --report ../cbom-report.json \
+  --source https://github.com/org/repo.git \
+  --branch main \
+  --create-pr true
+```
+
+Important:
+- `--source` should point to the same repository that produced the CBOM report.
+- `GITHUB_TARGET_REPO` can point to another repository you control if you want the draft PR created there instead of the scanned upstream repository.
+- The remediation flow requires a clean git working tree for the target repository before it applies changes.
+
+### How AI Is Used
+
+AI is used as a **structured remediation planner**, not as an unrestricted code-writing agent.
+
+The shared planner lives at:
+- `../remediation-core/create_ai_remediation_plan.js`
+
+What happens:
+1. CycloGuard reads the generated CBOM JSON report from disk using normal file I/O.
+2. It extracts structured fields such as severity, file path, line, code snippet, notes, and library metadata.
+3. It adds language-specific remediation rules for Node, Python, Java, and C#.
+4. It sends only that structured context to the model.
+5. The model returns structured JSON describing bounded remediation operations.
+6. CycloGuard applies only safe, high-confidence text replacements from that JSON.
+7. The repository is validated and rescanned before any PR is created.
+
+This means AI is being used to:
+- interpret cryptographic findings
+- propose minimal safer replacements
+- return structured remediation operations
+
+This means AI is not being used to:
+- blindly rewrite the whole repository
+- skip validation
+- auto-merge changes without review
+
+### Remediation Artifacts
+
+CBOM remediation writes a `remediation/` folder next to the report output.
+
+Main files:
+- `remediation/ai-remediation-plan.json`: what the AI planner proposed
+- `remediation/ai-remediation-applied.json`: what changes were actually applied
+- `remediation/ai-remediation-validation.json`: validation results after changes
+- `remediation/remediation-result.json`: overall remediation execution status
+- `remediation/remediation-summary.json`: combined user-facing summary
+- `remediation/pr-result.json`: draft PR creation result when enabled
+- `remediation/cbom-rescan.json`: the CBOM re-scan output after remediation
+
+Why multiple files exist:
+- `plan` records the proposal
+- `applied` records the actual patching result
+- `validation` records whether the repo still looked healthy after changes
+- `result` records the final execution outcome
+- `summary` gives one quick file for demos, audit review, and handoff
+
+For day-to-day review, `remediation/remediation-summary.json` is the best file to open first.
+
+### GitHub Actions Remediation Workflow
+
+CBOM remediation is also available through the manual GitHub Actions workflow:
+- `.github/workflows/cbom-remediation.yml`
+
+What it does:
+- accepts a GitHub repository URL and branch as workflow-dispatch inputs
+- generates a CBOM report
+- optionally runs AI remediation
+- optionally creates a draft PR
+- uploads the remediation artifact bundle
+- writes a workflow summary
+
+Manual workflow inputs:
+- `source_repo`
+- `source_branch`
+- `target_repo`
+- `enable_remediation`
+- `create_remediation_pr`
 
 ## Caching
 

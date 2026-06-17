@@ -27,7 +27,13 @@ export interface ScanOptions {
   exclude?: string[];      
   branch?: string;          
   useCodeQL?: boolean;
-  codeqlPath?: string;      
+  codeqlPath?: string;
+  enableRemediation?: boolean;
+  createPr?: boolean;
+  githubToken?: string;
+  githubRepo?: string;
+  gitUserName?: string;
+  gitUserEmail?: string;
 }
 
 export interface ScanResult {

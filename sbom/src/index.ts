@@ -11,7 +11,7 @@ import { detectProjects, groupByLanguage } from "./detectors/projects";
 import { runPostScanAutomation } from "./reports/automation";
 import { runGateParser } from "./reports/gate";
 import { buildLanguageReports } from "./scanner/pipeline";
-import { acquireSource, outputSlugFromSource, resolveGithubRepoIdentifier } from "./source/acquire";
+import { acquireSource, outputSlugFromSource, resolveGithubRepoIdentifier, resolveSourceGithubRepoIdentifier } from "./source/acquire";
 import { ensureTools } from "./tools/bootstrap";
 
 async function main(): Promise<void> {
@@ -24,8 +24,9 @@ async function main(): Promise<void> {
   try {
     console.log(`Using source at: ${repoRoot}`);
     ensureTools();
+    const sourceGithubRepo = resolveSourceGithubRepoIdentifier(args.source, repoRoot);
     const effectiveGithubRepo = resolveGithubRepoIdentifier(args.source, repoRoot, args.githubRepo);
-    const sourceRepoLabel = effectiveGithubRepo || args.source;
+    const sourceRepoLabel = sourceGithubRepo || args.source;
 
     const targets = detectProjects(repoRoot);
     if (targets.length === 0) {
@@ -42,10 +43,13 @@ async function main(): Promise<void> {
     buildLanguageReports(repoRoot, outputDir, targetsByLang, args.threshold, args);
     runGateParser(outputDir, args.threshold);
     await runPostScanAutomation({ ...args, githubRepo: effectiveGithubRepo || args.githubRepo }, {
+      repoRoot,
       outputDir,
       sourceRepoLabel,
       sourceBranch: args.branch || "default",
-      historyFile: path.join(path.resolve(args.output), "history-index.json")
+      historyFile: path.join(path.resolve(args.output), "history-index.json"),
+      targets,
+      remediationRepo: sourceGithubRepo || undefined
     });
 
     console.log(`\nDone. Reports available at: ${outputDir}`);

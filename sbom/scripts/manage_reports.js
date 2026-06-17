@@ -29,6 +29,8 @@ if (!reportDir || !runId || !runAttempt || !sha || !ref || !actor) {
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
 const issueResult = readJsonIfExists(path.join(reportDir, 'issue-result.json'), {});
+const remediationResult = readJsonIfExists(path.join(reportDir, 'remediation-result.json'), {});
+const prResult = readJsonIfExists(path.join(reportDir, 'pr-result.json'), {});
 const indexFile = historyFile || path.join(path.dirname(reportDir), 'history-index.json');
 let history = [];
 
@@ -51,6 +53,11 @@ const entry = {
   github_issue: issueResult.issue_url || null,
   github_issue_mode: issueResult.mode || 'not_run',
   alert_only_count: issueResult.alert_only_count || 0,
+  remediation_mode: remediationResult.mode || 'not_run',
+  remediation_branch: remediationResult.remediation_branch || null,
+  remediation_manual_review_required: Boolean(remediationResult.manual_review_required),
+  remediation_pr: prResult.pr_url || null,
+  remediation_pr_mode: prResult.mode || 'not_run',
   report_path: reportDir.replace(/\\/g, '/')
 };
 

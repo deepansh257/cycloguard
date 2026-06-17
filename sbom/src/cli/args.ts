@@ -36,6 +36,11 @@ export function parseArgs(argv: string[]): Args {
     misconfigScan: map.get("misconfig-scan") === "true",
     enableIssueCreation: map.get("create-issues") !== "false",
     enableSlack: map.get("notify-slack") !== "false",
+    enableRemediation: map.get("enable-remediation") === "true" || process.env.ENABLE_AI_REMEDIATION === "true",
+    enablePrCreation: map.get("create-pr") !== "false",
+    remediationBaseBranch: map.get("remediation-base-branch") || process.env.REMEDIATION_BASE_BRANCH,
+    gitUserName: map.get("git-user-name") || process.env.GIT_USER_NAME || "CycloGuard Bot",
+    gitUserEmail: map.get("git-user-email") || process.env.GIT_USER_EMAIL || "cycloguard-bot@example.com",
     githubRepo: map.get("github-repo") || process.env.GITHUB_TARGET_REPO || process.env.GITHUB_REPOSITORY,
     githubToken: map.get("github-token") || process.env.API_GITHUB_TOKEN || process.env.GITHUB_TOKEN,
     slackWebhookUrl: map.get("slack-webhook") || process.env.SLACK_WEBHOOK_URL

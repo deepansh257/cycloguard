@@ -23,6 +23,7 @@ import {
 } from './utils/reporter';
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
 import { CryptoFinding } from './types';
+import { loadLocalEnv } from './utils/env';
 
 // ── Java support ──────────────────────────────────────────────────────────────
 import { parseJavaSource } from './parser/javaParser';
@@ -52,6 +53,7 @@ function isJsFile(filePath: string):     boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const program = new Command();
+loadLocalEnv();
 
 program
   .name('cbom-js')
@@ -317,3 +319,4 @@ program
   });
 
 program.parse(process.argv);
+

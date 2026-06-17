@@ -8,7 +8,8 @@ import * as path from "path";
 export function loadLocalEnv(): void {
   const candidates = [
     path.resolve(process.cwd(), ".env"),
-    path.resolve(__dirname, "..", "..", ".env")
+    path.resolve(__dirname, "..", "..", ".env"),
+    path.resolve(__dirname, "..", "..", "..", ".env")
   ];
 
   for (const envPath of candidates) {

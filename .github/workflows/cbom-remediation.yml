@@ -1,0 +1,136 @@
+name: CBOM Remediation Pipeline
+
+on:
+  # Manual entry point for scanning any GitHub repository with the CBOM engine
+  # and then attempting AI-assisted remediation from the generated CBOM report.
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: "GitHub repository URL to scan (example: https://github.com/org/repo.git)"
+        required: true
+        type: string
+      source_branch:
+        description: "Branch name to scan from the provided repo URL"
+        required: false
+        default: main
+        type: string
+      target_repo:
+        description: "Optional owner/repo where the remediation draft PR should be created"
+        required: false
+        type: string
+      enable_remediation:
+        description: "Enable AI-assisted remediation after CBOM generation"
+        required: false
+        default: true
+        type: boolean
+      create_remediation_pr:
+        description: "Create a remediation draft PR after fixes are applied"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cbom-remediation:
+    runs-on: ubuntu-latest
+    env:
+      REPORT_DIR: cbom/reports/${{ github.run_id }}-${{ github.run_attempt }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      API_GITHUB_TOKEN: ${{ secrets.API_GITHUB_TOKEN }}
+      GIT_USER_NAME: CycloGuard Bot
+      GIT_USER_EMAIL: cycloguard-bot@users.noreply.github.com
+
+    steps:
+      - name: Checkout CycloGuard repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CBOM CLI deps
+        shell: bash
+        run: |
+          cd cbom
+          npm install
+
+      - name: Show resolved execution inputs
+        shell: bash
+        run: |
+          echo "Source repo: ${{ github.event.inputs.source_repo }}"
+          echo "Source branch: ${{ github.event.inputs.source_branch }}"
+          echo "Target repo: ${{ github.event.inputs.target_repo }}"
+          echo "Enable remediation: ${{ github.event.inputs.enable_remediation }}"
+          echo "Create remediation PR: ${{ github.event.inputs.create_remediation_pr }}"
+
+      - name: Generate CBOM report
+        # Phase 1 for CBOM flow: clone-or-pull the source repo, auto-detect crypto
+        # findings, and write a CycloneDX CBOM report into the workflow artifact area.
+        shell: bash
+        run: |
+          mkdir -p "$REPORT_DIR"
+          cd cbom
+          npx ts-node src/index.ts \
+            --source "${{ github.event.inputs.source_repo }}" \
+            --branch "${{ github.event.inputs.source_branch }}" \
+            --output "../$REPORT_DIR/cbom.json"
+
+      - name: Run AI remediation from CBOM report
+        if: ${{ github.event.inputs.enable_remediation == 'true' }}
+        # Phase 2 for CBOM flow: convert the CBOM report into a remediation plan,
+        # apply safe text replacements, validate, re-scan, and optionally open a draft PR.
+        shell: bash
+        run: |
+          cd cbom
+          npm run remediate -- \
+            --report "../$REPORT_DIR/cbom.json" \
+            --source "${{ github.event.inputs.source_repo }}" \
+            --branch "${{ github.event.inputs.source_branch }}" \
+            --github-repo "${{ github.event.inputs.target_repo }}" \
+            --create-pr "${{ github.event.inputs.create_remediation_pr }}"
+
+      - name: Publish workflow summary
+        if: always()
+        shell: bash
+        run: |
+          summary_file="$REPORT_DIR/remediation/remediation-summary.json"
+          {
+            echo "## CBOM Remediation Summary"
+            echo ""
+            echo "- Source repo: \`${{ github.event.inputs.source_repo }}\`"
+            echo "- Source branch: \`${{ github.event.inputs.source_branch }}\`"
+            echo "- Target repo: \`${{ github.event.inputs.target_repo || 'not provided' }}\`"
+            echo "- Remediation enabled: \`${{ github.event.inputs.enable_remediation }}\`"
+            echo "- Create remediation PR: \`${{ github.event.inputs.create_remediation_pr }}\`"
+            echo "- Report root: \`${{ env.REPORT_DIR }}\`"
+            echo "- Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            if [[ -f "$summary_file" ]]; then
+              echo "### Unified remediation summary"
+              echo ""
+              echo '```json'
+              cat "$summary_file"
+              echo '```'
+            else
+              echo "- Unified remediation summary: not generated"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: List generated reports
+        if: always()
+        shell: bash
+        run: |
+          echo "Report directory: $REPORT_DIR"
+          find "$REPORT_DIR" -maxdepth 4 -type f | sort
+
+      - name: Upload CBOM report bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbom-remediation-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.REPORT_DIR }}
+          if-no-files-found: warn
