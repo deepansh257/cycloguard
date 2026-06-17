@@ -1,0 +1,22 @@
+{
+  "name": "cycloguard-runner",
+  "version": "1.0.0",
+  "description": "Simple orchestrator — runs cbom and sbom together",
+  "main": "dist/index.js",
+  "bin": {
+    "cycloguard": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "simple-git": "^3.19.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  }
+}
