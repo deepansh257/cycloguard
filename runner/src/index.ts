@@ -1,24 +1,10 @@
-#!/usr/bin/env node
-// ─────────────────────────────────────────────────────────────────────────────
-// CycloGuard Runner – Simple Orchestrator
-// Usage:
-//   npx ts-node src/index.ts --source <url-or-path> [options]
-//
-// Options:
-//   --source <url|path>     GitHub URL or local path (required)
-//   --branch <branch>       Git branch (optional, for URLs only)
-//   --scan <mode>           cbom | sbom | all  (default: all)
-//   --output <dir>          Output directory   (default: ./cycloguard-output)
-//   --codeql-path <path>    Path to codeql binary (required for cbom)
-//   --no-cache              Force fresh clone
-// ─────────────────────────────────────────────────────────────────────────────
-
 import * as path from 'path';
 import * as fs from 'fs';
 import { cloneRepository, resolveLocalSource, isGitHubUrl } from './gitSource';
 import { detectTechStack } from './techDetector';
 import { runCbom } from './cbomRunner';
 import { runSbom } from './sbomRunner';
+import { generateDashboard } from './dashboardGenerator';  // ← new
 
 // ── Parse CLI args ────────────────────────────────────────────────────────────
 
@@ -129,6 +115,14 @@ async function main() {
     } else {
       console.log(`  ✔  SBOM: output at ${sbomOutputDir}`);
     }
+  }
+
+  // ── 6. Generate dashboard ─────────────────────────────────────────────────
+  try {
+    const dashboardFile = generateDashboard({ runDir, projectName, scanMode });
+    console.log(`  ✔  Dashboard: ${dashboardFile}`);
+  } catch (err: any) {
+    console.log(`  ⚠  Dashboard generation failed: ${err.message}`);
   }
 
   console.log('');

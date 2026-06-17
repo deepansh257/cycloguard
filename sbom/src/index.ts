@@ -17,7 +17,7 @@ import { ensureTools } from "./tools/bootstrap";
 async function main(): Promise<void> {
   loadLocalEnv();
   const args = parseArgs(process.argv.slice(2));
-  const outputDir = path.join(path.resolve(args.output), outputSlugFromSource(args.source, args.branch));
+  const outputDir = path.join(path.resolve(args.output));
   ensureDir(outputDir);
 
   const { repoRoot, cleanup } = acquireSource(args);
