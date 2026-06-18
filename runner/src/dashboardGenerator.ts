@@ -36,12 +36,27 @@ interface SbomVuln {
   fixed?: string;
   title?: string;
 }
+interface SbomSecret {
+  app?: string;
+  severity?: string;
+  rule_id?: string;
+  category?: string;
+  title?: string;
+  target?: string;
+  start_line?: number | null;
+  end_line?: number | null;
+}
 interface SbomJson {
   gate_failed?: boolean;
   threshold?: string;
   total_vulnerabilities?: number;
+  total_secrets?: number;
+  total_findings?: number;
   counts?: Record<string, number>;
+  secret_counts?: Record<string, number>;
+  finding_counts?: Record<string, number>;
   vulnerabilities?: SbomVuln[];
+  secrets?: SbomSecret[];
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -119,7 +134,11 @@ function getCbomStats(data: CbomJson): CbomStats {
 
 interface SbomStats {
   total:      number;
+  totalSecrets: number;
+  totalFindings: number;
   bySeverity: Record<string, number>;
+  secretBySeverity: Record<string, number>;
+  findingBySeverity: Record<string, number>;
   byPackage:  Record<string, number>;
   gateFailed: boolean;
   threshold:  string;
@@ -127,18 +146,32 @@ interface SbomStats {
 
 function getSbomStats(data: SbomJson): SbomStats {
   const unique = dedupeVulns(data.vulnerabilities ?? []);
+  const secrets = data.secrets ?? [];
   const bySeverity: Record<string, number> = { CRITICAL:0, HIGH:0, MEDIUM:0, LOW:0 };
+  const secretBySeverity: Record<string, number> = { CRITICAL:0, HIGH:0, MEDIUM:0, LOW:0 };
+  const findingBySeverity: Record<string, number> = { CRITICAL:0, HIGH:0, MEDIUM:0, LOW:0 };
   const byPackage:  Record<string, number> = {};
 
   for (const v of unique) {
     const sev = (v.severity ?? 'UNKNOWN').toUpperCase();
     if (bySeverity[sev] !== undefined) bySeverity[sev]++;
+    if (findingBySeverity[sev] !== undefined) findingBySeverity[sev]++;
     if (v.package) byPackage[v.package] = (byPackage[v.package] ?? 0) + 1;
+  }
+
+  for (const secret of secrets) {
+    const sev = (secret.severity ?? 'UNKNOWN').toUpperCase();
+    if (secretBySeverity[sev] !== undefined) secretBySeverity[sev]++;
+    if (findingBySeverity[sev] !== undefined) findingBySeverity[sev]++;
   }
 
   return {
     total:      unique.length,
+    totalSecrets: secrets.length,
+    totalFindings: unique.length + secrets.length,
     bySeverity,
+    secretBySeverity,
+    findingBySeverity,
     byPackage,
     gateFailed: data.gate_failed ?? false,
     threshold:  data.threshold ?? '',
@@ -160,6 +193,7 @@ function dedupeVulns(vulns: SbomVuln[]): SbomVuln[] {
 function buildDataScript(cbomData: CbomJson | null, sbomData: SbomJson | null): string {
   const cbomComponents = cbomData?.components ?? [];
   const sbomVulns      = sbomData ? dedupeVulns(sbomData.vulnerabilities ?? []) : [];
+  const sbomSecrets    = sbomData?.secrets ?? [];
 
   // Slim the component list — strip the large codeSnippet for the embedded
   // dataset; we still emit it but gzip / browser cache handle it fine.
@@ -182,6 +216,7 @@ function buildDataScript(cbomData: CbomJson | null, sbomData: SbomJson | null): 
   return `<script>
 const CBOM_COMPONENTS = ${JSON.stringify(safeComponents)};
 const SBOM_VULNS      = ${JSON.stringify(sbomVulns)};
+const SBOM_SECRETS    = ${JSON.stringify(sbomSecrets)};
 const CBOM_STATS      = ${cbomData  ? JSON.stringify(getCbomStats(cbomData))  : 'null'};
 const SBOM_STATS      = ${sbomData  ? JSON.stringify(getSbomStats(sbomData))  : 'null'};
 const GATE_FAILED     = ${sbomData?.gate_failed ?? false};
@@ -334,7 +369,7 @@ tr:hover td{background:var(--surface2)}
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="overview">Overview</div>
     ${hasCbom ? '<div class="tab" data-tab="cbom-tab">CBOM findings</div>' : ''}
-    ${hasSbom ? '<div class="tab" data-tab="sbom-tab">SBOM vulnerabilities</div>' : ''}
+    ${hasSbom ? '<div class="tab" data-tab="sbom-tab">SBOM findings</div>' : ''}
   </div>
 
   <!-- ── Overview ──────────────────────────────────────────────────────── -->
@@ -355,7 +390,7 @@ tr:hover td{background:var(--surface2)}
     </div>
 
     <div id="sbom-overview" style="display:${hasSbom ? '' : 'none'}">
-      <div class="section-label">Dependency vulnerabilities (SBOM)</div>
+      <div class="section-label">Dependency and secret findings (SBOM)</div>
       <div class="metrics" id="sbom-metrics"></div>
       <div class="charts-row">
         <div class="card">
@@ -363,8 +398,8 @@ tr:hover td{background:var(--surface2)}
           <div class="chart-wrap"><canvas id="chart-pkg" role="img" aria-label="SBOM vulnerabilities by package"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">Vulnerabilities by severity</div>
-          <div class="chart-wrap"><canvas id="chart-sbom-sev" role="img" aria-label="SBOM severity distribution"></canvas></div>
+          <div class="card-title">All findings by severity</div>
+          <div class="chart-wrap"><canvas id="chart-sbom-sev" role="img" aria-label="SBOM findings by severity"></canvas></div>
         </div>
       </div>
     </div>
@@ -405,6 +440,7 @@ tr:hover td{background:var(--surface2)}
   <!-- ── SBOM vulnerabilities tab ───────────────────────────────────────── -->
   ${hasSbom ? `
   <div class="tab-panel" id="sbom-tab">
+    <div class="section-label">Dependency vulnerabilities</div>
     <div class="filter-bar">
       <select id="sbom-sev-filter" onchange="renderSbomTable()">
         <option value="">All severities</option>
@@ -427,6 +463,32 @@ tr:hover td{background:var(--surface2)}
             <th>Description</th>
           </tr></thead>
           <tbody id="sbom-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-label">Secret findings</div>
+    <div class="filter-bar">
+      <select id="sbom-secret-sev-filter" onchange="renderSbomSecretTable()">
+        <option value="">All severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+      <input type="text" id="sbom-secret-search" placeholder="Search rule, category, file..." oninput="renderSbomSecretTable()" />
+    </div>
+    <div class="card" style="padding:0">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:90px">Severity</th>
+            <th>Rule</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Description</th>
+          </tr></thead>
+          <tbody id="sbom-secret-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -523,6 +585,8 @@ function renderHeader() {
   }
   if (SBOM_STATS) {
     parts.push('📦 ' + SBOM_STATS.total + ' dependency vulnerabilities');
+    parts.push('🔐 ' + SBOM_STATS.totalSecrets + ' secret findings');
+    parts.push('🛡 ' + SBOM_STATS.totalFindings + ' total SBOM findings');
     if (SCAN_THRESHOLD) parts.push('🎯 Threshold: ' + SCAN_THRESHOLD);
   }
   document.getElementById('scan-meta').innerHTML =
@@ -561,11 +625,13 @@ function renderSbomOverview() {
   if (!SBOM_STATS) return;
   const s = SBOM_STATS;
   document.getElementById('sbom-metrics').innerHTML = [
-    ['Total unique',  s.total,                ''],
-    ['Critical',      s.bySeverity.CRITICAL,  'c-crit'],
-    ['High',          s.bySeverity.HIGH,      'c-high'],
-    ['Medium',        s.bySeverity.MEDIUM,    'c-med'],
-    ['Low',           s.bySeverity.LOW,       'c-safe'],
+    ['Dependency CVEs', s.total,                       ''],
+    ['Secret findings', s.totalSecrets,               'c-high'],
+    ['Total findings',  s.totalFindings,              ''],
+    ['Critical',        s.findingBySeverity.CRITICAL, 'c-crit'],
+    ['High',            s.findingBySeverity.HIGH,     'c-high'],
+    ['Medium',          s.findingBySeverity.MEDIUM,   'c-med'],
+    ['Low',             s.findingBySeverity.LOW,      'c-safe'],
   ].map(([l,v,c]) =>
     '<div class="mc"><div class="mc-label">' + l + '</div><div class="mc-val ' + c + '">' + v + '</div></div>'
   ).join('');
@@ -577,8 +643,8 @@ function renderSbomOverview() {
     isDark ? '#EF9F27' : '#854F0B'
   );
 
-  const sevLabels = ['CRITICAL','HIGH','MEDIUM','LOW'].filter(k => s.bySeverity[k] > 0);
-  mkDoughnut('chart-sbom-sev', sevLabels, sevLabels.map(k => s.bySeverity[k]), sevLabels.map(k => SEV_COLOR[k]));
+  const sevLabels = ['CRITICAL','HIGH','MEDIUM','LOW'].filter(k => s.findingBySeverity[k] > 0);
+  mkDoughnut('chart-sbom-sev', sevLabels, sevLabels.map(k => s.findingBySeverity[k]), sevLabels.map(k => SEV_COLOR[k]));
 }
 
 // ── CBOM table ────────────────────────────────────────────────────────────────
@@ -688,6 +754,46 @@ function renderSbomTable() {
 }
 
 // ── snippet toggle ─────────────────────────────────────────────────────────────
+function renderSbomSecretTable() {
+  const tbody = document.getElementById('sbom-secret-tbody');
+  if (!tbody) return;
+
+  const sevFilter = (document.getElementById('sbom-secret-sev-filter')?.value || '').toUpperCase();
+  const q = (document.getElementById('sbom-secret-search')?.value || '').toLowerCase();
+
+  let rows = SBOM_SECRETS.filter((secret) => {
+    const sev = (secret.severity || '').toUpperCase();
+    if (sevFilter && sev !== sevFilter) return false;
+    if (q && ![secret.rule_id, secret.category, secret.title, secret.target].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    const as = (a.severity || '').toUpperCase();
+    const bs = (b.severity || '').toUpperCase();
+    return SEV_ORDER.indexOf(as) - SEV_ORDER.indexOf(bs);
+  });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No secret findings match the filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((secret) => {
+    const sev = (secret.severity || 'UNKNOWN').toUpperCase();
+    const location = secret.target
+      ? esc(secret.target) + (secret.start_line ? ':' + secret.start_line : '')
+      : '?';
+    return '<tr>'
+      + '<td>' + sevBadge(sev) + '</td>'
+      + '<td class="mono">' + esc(secret.rule_id || '?') + '</td>'
+      + '<td>' + esc(secret.category || '?') + '</td>'
+      + '<td><span class="loc">' + location + '</span></td>'
+      + '<td style="max-width:320px;font-size:12px;color:var(--muted)">' + esc(shortText(secret.title, 110)) + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
 function toggleSnip(id) {
   const el  = document.getElementById(id);
   const btn = el.previousElementSibling;
@@ -702,6 +808,7 @@ renderCbomOverview();
 renderSbomOverview();
 renderCbomTable();
 renderSbomTable();
+renderSbomSecretTable();
 </script>
 </body>
 </html>`;

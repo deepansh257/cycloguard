@@ -4,6 +4,14 @@
  */
 import { execSync } from "child_process";
 import * as path from "path";
+import pino from "pino";
+
+const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "common", "logger.js")) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    command: (command: string) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 type RunOptions = {
   cwd?: string;
@@ -16,7 +24,7 @@ export function run(command: string, cwdOrOptions?: string | RunOptions): void {
     ? { cwd: cwdOrOptions }
     : (cwdOrOptions || {});
   if (!options.quiet) {
-    console.log(`\n$ ${options.displayCommand || command}`);
+    logger.command(options.displayCommand || command);
   }
   execSync(command, {
     cwd: options.cwd,
@@ -27,7 +35,7 @@ export function run(command: string, cwdOrOptions?: string | RunOptions): void {
 
 export function runCapture(command: string, options: RunOptions = {}): string {
   if (!options.quiet) {
-    console.log(`\n$ ${options.displayCommand || command}`);
+    logger.command(options.displayCommand || command);
   }
   return execSync(command, {
     cwd: options.cwd,

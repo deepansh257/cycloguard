@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const https = require('https');
+const path = require('path');
+const pino = require('pino');
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js'));
+const logger = createAppLogger({ pino });
 
 function getArg(name, fallback = null) {
   const idx = process.argv.indexOf(`--${name}`);
@@ -53,7 +57,7 @@ async function main() {
   const sourceBranch = getArg('source-branch', 'unknown-branch');
 
   if (!repo || !reportPath || !runUrl || !token || !output) {
-    console.error('Missing args: --repo --report --run-url --token --output');
+    logger.error('Missing args: --repo --report --run-url --token --output');
     process.exit(1);
   }
 
@@ -83,7 +87,11 @@ async function main() {
     `Run: ${runUrl}`,
     `Gate threshold: ${(report.threshold || 'high').toUpperCase()}`,
     `Total vulnerabilities: ${report.total_vulnerabilities || 0}`,
+    `Total secret findings: ${report.total_secrets || 0}`,
+    `Total security findings: ${report.total_findings || ((report.total_vulnerabilities || 0) + (report.total_secrets || 0))}`,
     `Severity counts: ${JSON.stringify(report.counts || {})}`,
+    `Secret severity counts: ${JSON.stringify(report.secret_counts || {})}`,
+    `Overall finding counts: ${JSON.stringify(report.finding_counts || {})}`,
     '',
     'High/Critical findings:',
     ...summarize(ticketVulns),
@@ -127,6 +135,8 @@ async function main() {
       '',
       `Run: ${runUrl}`,
       `Severity counts: ${JSON.stringify(report.counts || {})}`,
+      `Secret severity counts: ${JSON.stringify(report.secret_counts || {})}`,
+      `Overall finding counts: ${JSON.stringify(report.finding_counts || {})}`,
       '',
       'High/Critical findings:',
       ...summarize(ticketVulns)
@@ -184,6 +194,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err.message);
+  logger.error(err.message);
   process.exit(1);
 });
+

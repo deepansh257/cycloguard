@@ -1,10 +1,21 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import pino from 'pino';
 import { cloneRepository, resolveLocalSource, isGitHubUrl } from './gitSource';
 import { detectTechStack } from './techDetector';
 import { runCbom } from './cbomRunner';
 import { runSbom } from './sbomRunner';
-import { generateDashboard } from './dashboardGenerator';  // ← new
+import { generateDashboard } from './dashboardGenerator';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+    error: (message: string, meta?: Record<string, unknown>) => void;
+    raw: (message: string) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 function buildRunFolderName(projectName: string, branch?: string): string {
   const safeProject = projectName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -14,8 +25,6 @@ function buildRunFolderName(projectName: string, branch?: string): string {
   const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   return `${safeProject}__${safeBranch}__${stamp}`;
 }
-
-// ── Parse CLI args ────────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {};
@@ -35,32 +44,28 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
   return args;
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const source     = args['source'] as string | undefined;
-  const branch     = args['branch'] as string | undefined;
-  const scanMode   = (args['scan'] as string) || 'all';
-  const outputDir  = path.resolve((args['output'] as string) || './cycloguard-output');
+  const source = args['source'] as string | undefined;
+  const branch = args['branch'] as string | undefined;
+  const scanMode = (args['scan'] as string) || 'all';
+  const outputDir = path.resolve((args['output'] as string) || './cycloguard-output');
   const codeqlPath = args['codeql-path'] as string | undefined;
-  const noCache    = args['no-cache'] === true;
+  const noCache = args['no-cache'] === true;
 
   if (!source) {
-    console.error('  ✖  --source is required');
+    logger.error('--source is required');
     process.exit(1);
   }
 
   if (!['cbom', 'sbom', 'all'].includes(scanMode)) {
-    console.error(`  ✖  --scan must be cbom, sbom, or all (got: ${scanMode})`);
+    logger.error(`--scan must be cbom, sbom, or all (got: ${scanMode})`);
     process.exit(1);
   }
 
-  console.log('\n  🔐 CycloGuard Runner\n');
-
-  // ── 1. Resolve source (clone once, shared by both tools) ──────────────────
-  console.log('  → Resolving source…');
+  logger.raw('\n  CycloGuard Runner\n');
+  logger.info('Resolving source...');
 
   let localPath: string;
   let projectName: string;
@@ -71,26 +76,23 @@ async function main() {
       clearRepoCache(source, branch);
     }
     const result = await cloneRepository(source, branch, true);
-    localPath   = result.localPath;
+    localPath = result.localPath;
     projectName = result.projectName;
   } else {
     const result = resolveLocalSource(source);
-    localPath   = result.localPath;
+    localPath = result.localPath;
     projectName = result.projectName;
   }
 
-  console.log(`  ✔  Source ready: ${projectName} at ${localPath}`);
+  logger.info(`Source ready: ${projectName} at ${localPath}`);
 
-  // ── 2. Detect tech stack ──────────────────────────────────────────────────
   const techStack = detectTechStack(localPath);
-  console.log(`  ✔  Detected: ${techStack.join(', ') || 'unknown'}`);
+  logger.info(`Detected: ${techStack.join(', ') || 'unknown'}`);
 
-  // ── 3. Prepare output dir ─────────────────────────────────────────────────
-  const runDir    = path.join(outputDir, buildRunFolderName(projectName, branch));
+  const runDir = path.join(outputDir, buildRunFolderName(projectName, branch));
   fs.mkdirSync(runDir, { recursive: true });
-  console.log(`  ✔  Output: ${runDir}\n`);
+  logger.info(`Output: ${runDir}`);
 
-  // ── 4. Run scans ──────────────────────────────────────────────────────────
   const runCbomScan = scanMode === 'cbom' || scanMode === 'all';
   const runSbomScan = scanMode === 'sbom' || scanMode === 'all';
 
@@ -109,37 +111,35 @@ async function main() {
       : Promise.resolve(null),
   ]);
 
-  // ── 5. Print results ──────────────────────────────────────────────────────
-  console.log('\n  ── Results ──────────────────────────────────────────');
+  logger.raw('\n  Results\n');
 
   if (cbomResult) {
     if (cbomResult.error) {
-      console.log(`  ✖  CBOM: ${cbomResult.error}`);
+      logger.error(`CBOM: ${cbomResult.error}`);
     } else {
-      console.log(`  ✔  CBOM: output at ${cbomOutputFile}`);
+      logger.info(`CBOM: output at ${cbomOutputFile}`);
     }
   }
 
   if (sbomResult) {
     if (sbomResult.error) {
-      console.log(`  ✖  SBOM: ${sbomResult.error}`);
+      logger.error(`SBOM: ${sbomResult.error}`);
     } else {
-      console.log(`  ✔  SBOM: output at ${sbomOutputDir}`);
+      logger.info(`SBOM: output at ${sbomOutputDir}`);
     }
   }
 
-  // ── 6. Generate dashboard ─────────────────────────────────────────────────
   try {
     const dashboardFile = generateDashboard({ runDir, projectName, scanMode });
-    console.log(`  ✔  Dashboard: ${dashboardFile}`);
+    logger.info(`Dashboard: ${dashboardFile}`);
   } catch (err: any) {
-    console.log(`  ⚠  Dashboard generation failed: ${err.message}`);
+    logger.warn(`Dashboard generation failed: ${err.message}`);
   }
 
-  console.log('');
+  logger.raw('');
 }
 
-main().catch(err => {
-  console.error(`\n  ✖  ${err.message}`);
+main().catch((err) => {
+  logger.error(err.message);
   process.exit(1);
 });

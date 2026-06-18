@@ -4,15 +4,26 @@
  * scanning pipeline execution, and gate evaluation.
  */
 import * as path from "path";
+import pino from "pino";
 import { parseArgs } from "./cli/args";
 import { loadLocalEnv } from "./core/env";
-import { ensureDir, writeJson } from "./core/fs";
+import { ensureDir } from "./core/fs";
 import { detectProjects, groupByLanguage } from "./detectors/projects";
 import { runPostScanAutomation } from "./reports/automation";
 import { runGateParser } from "./reports/gate";
 import { buildLanguageReports } from "./scanner/pipeline";
 import { acquireSource, resolveGithubRepoIdentifier } from "./source/acquire";
 import { ensureTools } from "./tools/bootstrap";
+
+const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "common", "logger.js")) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+    error: (message: string, meta?: Record<string, unknown>) => void;
+    raw: (message: string) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 async function main(): Promise<void> {
   loadLocalEnv();
@@ -22,7 +33,7 @@ async function main(): Promise<void> {
 
   const { repoRoot, cleanup } = acquireSource(args);
   try {
-    console.log(`Using source at: ${repoRoot}`);
+    logger.info(`Using source at: ${repoRoot}`);
     ensureTools();
     const effectiveGithubRepo = resolveGithubRepoIdentifier(args.source, repoRoot, args.githubRepo);
     const sourceRepoLabel = effectiveGithubRepo || args.source;
@@ -41,13 +52,13 @@ async function main(): Promise<void> {
       historyFile: path.join(outputDir, "automation", "history-index.json")
     });
 
-    console.log(`\nDone. Reports available at: ${outputDir}`);
+    logger.info(`Done. Reports available at: ${outputDir}`);
   } finally {
     if (cleanup) cleanup();
   }
 }
 
 main().catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  logger.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

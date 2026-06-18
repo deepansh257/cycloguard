@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const pino = require('pino');
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js'));
+const logger = createAppLogger({ pino });
 
 function getArg(name, fallback = null) {
   const idx = process.argv.indexOf(`--${name}`);
@@ -20,13 +23,15 @@ const sourceRepo = getArg('source-repo', 'unknown-repo');
 const sourceBranch = getArg('source-branch', 'unknown-branch');
 
 if (!reportDir || !runUrl || !output) {
-  console.error('Missing required args: --report-dir --run-url --output');
+  logger.error('Missing required args: --report-dir --run-url --output');
   process.exit(1);
 }
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
 const issueResult = readJsonIfExists(issueResultPath || path.join(reportDir, 'automation', 'issue-result.json'), { mode: 'skipped' });
 const counts = gate.counts || {};
+const secretCounts = gate.secret_counts || {};
+const findingCounts = gate.finding_counts || {};
 const status = gate.gate_failed ? 'FAILED' : 'PASSED';
 const issueText = issueResult.issue_url
   ? `*GitHub issue:* ${issueResult.issue_url}`
@@ -38,11 +43,27 @@ const payload = {
     { type: 'section', text: { type: 'mrkdwn', text: `*CycloGuard Result:* ${status}` } },
     { type: 'section', text: { type: 'mrkdwn', text: `*Source:* ${sourceRepo} @ ${sourceBranch}` } },
     { type: 'section', text: { type: 'mrkdwn', text: `*Total CVEs:* ${gate.total_vulnerabilities || 0}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Total secret findings:* ${gate.total_secrets || 0}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Total security findings:* ${gate.total_findings || ((gate.total_vulnerabilities || 0) + (gate.total_secrets || 0))}` } },
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
         text: `*Severity Counts:* CRITICAL=${counts.CRITICAL || 0}, HIGH=${counts.HIGH || 0}, MEDIUM=${counts.MEDIUM || 0}, LOW=${counts.LOW || 0}`
+      }
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Secret Severity Counts:* CRITICAL=${secretCounts.CRITICAL || 0}, HIGH=${secretCounts.HIGH || 0}, MEDIUM=${secretCounts.MEDIUM || 0}, LOW=${secretCounts.LOW || 0}`
+      }
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Overall Finding Counts:* CRITICAL=${findingCounts.CRITICAL || 0}, HIGH=${findingCounts.HIGH || 0}, MEDIUM=${findingCounts.MEDIUM || 0}, LOW=${findingCounts.LOW || 0}`
       }
     },
     {
@@ -59,3 +80,4 @@ const payload = {
 };
 
 fs.writeFileSync(output, JSON.stringify(payload, null, 2));
+

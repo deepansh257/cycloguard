@@ -1,24 +1,36 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import pino from 'pino';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 export interface SbomRunnerOptions {
-  localPath:  string;
-  outputDir:  string;
-  branch?:    string;
+  localPath: string;
+  outputDir: string;
+  branch?: string;
 }
 
 export interface SbomRunnerResult {
   error?: string;
 }
 
-/**
- * Runs sbom pointing at a local path (already cloned by gitSource).
- * Mirrors the working manual command:
- *   npx ts-node src/index.ts --source <localPath> --branch <branch> --output <dir>
- */
+function toWindowsCmdCommand(args: string[]): string {
+  return args.map((arg) => {
+    if (/[\s"]/u.test(arg)) {
+      return `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')}"`;
+    }
+    return arg;
+  }).join(' ');
+}
+
 export function runSbom(opts: SbomRunnerOptions): Promise<SbomRunnerResult> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const sbomRoot = path.resolve(__dirname, '..', '..', 'sbom');
 
     if (!fs.existsSync(sbomRoot)) {
@@ -38,14 +50,18 @@ export function runSbom(opts: SbomRunnerOptions): Promise<SbomRunnerResult> {
       args.push('--branch', opts.branch);
     }
 
-    console.log('  → Running SBOM scan…');
-
-    const result = spawnSync('npx', args, {
-      cwd:   sbomRoot,
-      stdio: 'inherit',   // stream output directly to terminal
-      shell: true,        // needed on Windows
-      timeout: 15 * 60 * 1000,
-    });
+    logger.info('Running SBOM scan...');
+    const result = process.platform === 'win32'
+      ? spawnSync('cmd.exe', ['/d', '/s', '/c', toWindowsCmdCommand(['npx.cmd', ...args])], {
+        cwd: sbomRoot,
+        stdio: 'inherit',
+        timeout: 15 * 60 * 1000,
+      })
+      : spawnSync('npx', args, {
+        cwd: sbomRoot,
+        stdio: 'inherit',
+        timeout: 15 * 60 * 1000,
+      });
 
     if (result.error) {
       resolve({ error: result.error.message });

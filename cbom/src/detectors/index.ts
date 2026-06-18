@@ -7,6 +7,14 @@ import { bridgeCodeQLResults } from './codeqlBridge';
 import { runCodeQL } from '../utils/codeqlRunner';
 import * as path from 'path';
 import * as fs from 'fs';
+import pino from 'pino';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    debug: (message: string, meta?: Record<string, unknown>) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 export interface DetectorResult {
   findings: CryptoFinding[];
@@ -21,8 +29,8 @@ export function runAllDetectors(
   const findings: CryptoFinding[] = [];
   const errors: string[] = [];
   const detectors = [
-    { name: 'registry',          fn: detectFromRegistry     },
-    { name: 'tls',               fn: detectTLS              },
+    { name: 'registry', fn: detectFromRegistry },
+    { name: 'tls', fn: detectTLS },
     { name: 'hardcoded-secrets', fn: detectHardcodedSecrets },
   ];
   for (const detector of detectors) {
@@ -41,14 +49,16 @@ export async function runCodeQLPass(
   astFindings: CryptoFinding[],
   options: ScanOptions
 ): Promise<CryptoFinding[]> {
-  const queriesBase    = path.resolve(__dirname, '../../queries');
-  const jsQueriesDir   = path.join(queriesBase, 'js');
+  const queriesBase = path.resolve(__dirname, '../../queries');
+  const jsQueriesDir = path.join(queriesBase, 'js');
   const javaQueriesDir = path.join(queriesBase, 'java');
 
-  console.log('[CodeQL] jsQueriesDir resolved to:', jsQueriesDir);
-  console.log('[CodeQL] jsQueriesDir exists?', fs.existsSync(jsQueriesDir));
-  console.log('[CodeQL] javaQueriesDir resolved to:', javaQueriesDir);
-  console.log('[CodeQL] javaQueriesDir exists?', fs.existsSync(javaQueriesDir));
+  logger.debug('Resolved CodeQL query directories', {
+    jsQueriesDir,
+    jsQueriesDirExists: fs.existsSync(jsQueriesDir),
+    javaQueriesDir,
+    javaQueriesDirExists: fs.existsSync(javaQueriesDir)
+  });
 
   const sarifResults = await runCodeQL({
     codeqlPath: options.codeqlPath,
@@ -63,7 +73,7 @@ export async function runCodeQLPass(
 
 function deduplicateASTFindings(findings: CryptoFinding[]): CryptoFinding[] {
   const seen = new Set<string>();
-  return findings.filter(f => {
+  return findings.filter((f) => {
     const key = `${f.location}:${f.line}:${f.algorithm}:${f.library}`;
     if (seen.has(key)) return false;
     seen.add(key);

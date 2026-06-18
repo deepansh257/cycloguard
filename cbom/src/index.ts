@@ -7,6 +7,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
+import pino from 'pino';
 import { ScanOptions, ScanResult } from './types';
 import { findFiles, readFile, getRelativePath } from './parser/fileScanner';
 import { parseSource } from './parser/astParser';
@@ -23,6 +24,16 @@ import {
 } from './utils/reporter';
 import { isGitHubUrl, cloneRepository, resolveLocalSource } from './utils/githubSource';
 import { CryptoFinding } from './types';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+    error: (message: string, meta?: Record<string, unknown>) => void;
+    raw: (message: string) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 // ── Java support ──────────────────────────────────────────────────────────────
 import { parseJavaSource } from './parser/javaParser';
@@ -102,15 +113,15 @@ program
     // ── Step 1: Resolve source ────────────────────────────────────────────────
     try {
       if (isGitHubUrl(options.source)) {
-        console.log(`  Cloning repository: ${options.source}`);
-        if (options.branch) console.log(`  Branch: ${options.branch}`);
-        console.log('');
+        logger.info(`  Cloning repository: ${options.source}`);
+        if (options.branch) logger.info(`  Branch: ${options.branch}`);
+        logger.raw('');
         sourceResult = await cloneRepository(options.source, options.branch, options.verbose);
       } else {
         sourceResult = resolveLocalSource(options.source);
       }
     } catch (err: any) {
-      console.error(`\n  ERROR: Could not resolve source — ${err?.message}`);
+      logger.error(`\n  ERROR: Could not resolve source — ${err?.message}`);
       process.exit(1);
     }
 
@@ -134,13 +145,13 @@ program
         options.exclude?.length ? options.exclude : undefined
       );
     } catch (err: any) {
-      console.error(`\n  ERROR: File discovery failed — ${err?.message}`);
+      logger.error(`\n  ERROR: File discovery failed — ${err?.message}`);
       cleanup();
       process.exit(1);
     }
 
     if (files.length === 0) {
-      console.error('  ERROR: No supported source files found in the specified source.');
+      logger.error('ERROR: No supported source files found in the specified source.');
       cleanup();
       process.exit(1);
     }
@@ -152,11 +163,11 @@ program
     const csharpFiles = files.filter(isCSharpFile);
 
     if (options.verbose) {
-      if (jsFiles.length)     console.log(`  JS/TS files found  : ${jsFiles.length}`);
-      if (javaFiles.length)   console.log(`  Java files found   : ${javaFiles.length}`);
-      if (pythonFiles.length) console.log(`  Python files found : ${pythonFiles.length}`);
-      if (csharpFiles.length) console.log(`  C# files found     : ${csharpFiles.length}`);
-      console.log('');
+      if (jsFiles.length)     logger.info(`  JS/TS files found  : ${jsFiles.length}`);
+      if (javaFiles.length)   logger.info(`  Java files found   : ${javaFiles.length}`);
+      if (pythonFiles.length) logger.info(`  Python files found : ${pythonFiles.length}`);
+      if (csharpFiles.length) logger.info(`  C# files found     : ${csharpFiles.length}`);
+      logger.raw('');
     }
 
     printScanStart(options.source, files.length);
@@ -235,17 +246,17 @@ program
         pythonFiles.length > 0 || csharpFiles.length > 0;
 
       if (!hasAnyFiles) {
-        console.log('\n  CodeQL skipped — no supported files in this scan.\n');
+        logger.info('\n  CodeQL skipped — no supported files in this scan.\n');
       } else {
-        console.log('\n  Running CodeQL taint analysis…');
+        logger.info('\n  Running CodeQL taint analysis…');
         try {
           const withCodeQL = await runCodeQLPass(localPath, allFindings, options);
           const newCount   = withCodeQL.length - allFindings.length;
           allFindings.length = 0;
           allFindings.push(...withCodeQL);
-          console.log(`  CodeQL complete — ${newCount} additional finding(s) from taint analysis\n`);
+          logger.info(`  CodeQL complete — ${newCount} additional finding(s) from taint analysis\n`);
         } catch (err: any) {
-          console.warn(`  WARNING: CodeQL skipped — ${err.message}\n`);
+          logger.warn(`  WARNING: CodeQL skipped — ${err.message}\n`);
         }
       }
     }
@@ -268,10 +279,10 @@ program
     printFindings(allFindings, options.verbose);
 
     if (options.verbose && allErrors.length > 0) {
-      console.log(`  Warnings (${allErrors.length}):`);
-      allErrors.slice(0, 10).forEach(e => console.log(`    - ${e}`));
-      if (allErrors.length > 10) console.log(`    ... and ${allErrors.length - 10} more`);
-      console.log('');
+      logger.info(`  Warnings (${allErrors.length}):`);
+      allErrors.slice(0, 10).forEach(e => logger.info(`    - ${e}`));
+      if (allErrors.length > 10) logger.info(`    ... and ${allErrors.length - 10} more`);
+      logger.raw('');
     }
 
     // ── Step 6: Write CBOM ────────────────────────────────────────────────────
@@ -284,7 +295,7 @@ program
       fs.writeFileSync(outputPath, JSON.stringify(cbom, null, 2), 'utf-8');
       printOutput(outputPath);
     } catch (err: any) {
-      console.error(`\n  ERROR: Could not write output file — ${err?.message}`);
+      logger.error(`\n  ERROR: Could not write output file — ${err?.message}`);
       cleanup();
       process.exit(1);
     }
@@ -294,7 +305,7 @@ program
 
     // ── Step 8: Exit codes ────────────────────────────────────────────────────
     if (options.failOnWeak && summary.weak > 0) {
-      console.error(`  FAIL: ${summary.weak} weak algorithm(s) found. Exiting with code 1.\n`);
+      logger.error(`  FAIL: ${summary.weak} weak algorithm(s) found. Exiting with code 1.\n`);
       process.exit(1);
     }
 
@@ -308,7 +319,7 @@ program
         (threshold <= severityOrder.indexOf('LOW')      && summary.low      > 0);
 
       if (hasAboveThreshold) {
-        console.error(`  FAIL: Findings at or above ${options.failOnSeverity} severity detected. Exiting with code 1.\n`);
+        logger.error(`  FAIL: Findings at or above ${options.failOnSeverity} severity detected. Exiting with code 1.\n`);
         process.exit(1);
       }
     }
@@ -317,3 +328,5 @@ program
   });
 
 program.parse(process.argv);
+
+
