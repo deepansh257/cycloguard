@@ -65,6 +65,8 @@ async function main() {
   const allVulns = report.vulnerabilities || [];
   const ticketVulns = allVulns.filter((v) => ['HIGH', 'CRITICAL'].includes(v.severity));
   const alertOnlyVulns = allVulns.filter((v) => ['LOW', 'MEDIUM'].includes(v.severity));
+  const reproducibility = report.reproducibility || {};
+  const reproducibilityWarnings = reproducibility.warnings || [];
   const marker = `<!-- cycloguard:${sourceRepo}:${sourceBranch} -->`;
   const title = `CycloGuard dependency findings: ${sourceRepo} [${sourceBranch}]`;
 
@@ -92,6 +94,8 @@ async function main() {
     `Severity counts: ${JSON.stringify(report.counts || {})}`,
     `Secret severity counts: ${JSON.stringify(report.secret_counts || {})}`,
     `Overall finding counts: ${JSON.stringify(report.finding_counts || {})}`,
+    `Reproducibility summary: deterministic=${reproducibility.deterministic_projects || 0}, non-deterministic=${reproducibility.non_deterministic_projects || 0}`,
+    ...(reproducibilityWarnings.length > 0 ? ['', 'Lockfile / reproducibility warnings:', ...reproducibilityWarnings.map((entry) => `- [${entry.language}] ${entry.project_path}: ${entry.warning} (selected source: ${(entry.source_of_truth_files || []).join(', ') || 'fallback manifest'}; supporting files: ${(entry.supporting_files || []).join(', ') || 'none'})`)] : []),
     '',
     'High/Critical findings:',
     ...summarize(ticketVulns),
@@ -137,6 +141,8 @@ async function main() {
       `Severity counts: ${JSON.stringify(report.counts || {})}`,
       `Secret severity counts: ${JSON.stringify(report.secret_counts || {})}`,
       `Overall finding counts: ${JSON.stringify(report.finding_counts || {})}`,
+      `Reproducibility summary: deterministic=${reproducibility.deterministic_projects || 0}, non-deterministic=${reproducibility.non_deterministic_projects || 0}`,
+      ...(reproducibilityWarnings.length > 0 ? ['', 'Lockfile / reproducibility warnings:', ...reproducibilityWarnings.map((entry) => `- [${entry.language}] ${entry.project_path}: ${entry.warning} (selected source: ${(entry.source_of_truth_files || []).join(', ') || 'fallback manifest'}; supporting files: ${(entry.supporting_files || []).join(', ') || 'none'})`)] : []),
       '',
       'High/Critical findings:',
       ...summarize(ticketVulns)

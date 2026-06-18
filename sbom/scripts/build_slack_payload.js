@@ -32,6 +32,8 @@ const issueResult = readJsonIfExists(issueResultPath || path.join(reportDir, 'au
 const counts = gate.counts || {};
 const secretCounts = gate.secret_counts || {};
 const findingCounts = gate.finding_counts || {};
+const reproducibility = gate.reproducibility || {};
+const reproducibilityWarnings = reproducibility.warnings || [];
 const status = gate.gate_failed ? 'FAILED' : 'PASSED';
 const issueText = issueResult.issue_url
   ? `*GitHub issue:* ${issueResult.issue_url}`
@@ -66,6 +68,20 @@ const payload = {
         text: `*Overall Finding Counts:* CRITICAL=${findingCounts.CRITICAL || 0}, HIGH=${findingCounts.HIGH || 0}, MEDIUM=${findingCounts.MEDIUM || 0}, LOW=${findingCounts.LOW || 0}`
       }
     },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Reproducibility:* deterministic=${reproducibility.deterministic_projects || 0}, non-deterministic=${reproducibility.non_deterministic_projects || 0}`
+      }
+    },
+    ...(reproducibilityWarnings.length > 0 ? [{
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Lockfile warning:* ${reproducibilityWarnings[0].warning}\n*Selected source:* ${(reproducibilityWarnings[0].source_of_truth_files || []).join(', ') || 'fallback manifest'}\n*Supporting files:* ${(reproducibilityWarnings[0].supporting_files || []).join(', ') || 'none'}`
+      }
+    }] : []),
     {
       type: 'section',
       text: {

@@ -28,6 +28,7 @@ export function runGateParser(outDir: string, threshold: "critical" | "high"): v
     total_vulnerabilities: gate.total_vulnerabilities,
     total_secrets: gate.total_secrets,
     total_findings: gate.total_findings,
+    reproducibility: gate.reproducibility,
     counts: gate.counts,
     secret_counts: gate.secret_counts,
     finding_counts: gate.finding_counts

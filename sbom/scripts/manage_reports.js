@@ -57,6 +57,8 @@ const entry = {
   severity_counts: gate.counts || {},
   secret_severity_counts: gate.secret_counts || {},
   finding_severity_counts: gate.finding_counts || {},
+  reproducibility: gate.reproducibility || {},
+  source_selection: (gate.reproducibility && gate.reproducibility.source_selection) || [],
   github_issue: issueResult.issue_url || null,
   github_issue_mode: issueResult.mode || 'not_run',
   alert_only_count: issueResult.alert_only_count || 0,

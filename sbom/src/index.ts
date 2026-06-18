@@ -7,7 +7,7 @@ import * as path from "path";
 import pino from "pino";
 import { parseArgs } from "./cli/args";
 import { loadLocalEnv } from "./core/env";
-import { ensureDir } from "./core/fs";
+import { ensureDir, writeJson } from "./core/fs";
 import { detectProjects, groupByLanguage } from "./detectors/projects";
 import { runPostScanAutomation } from "./reports/automation";
 import { runGateParser } from "./reports/gate";
@@ -42,6 +42,24 @@ async function main(): Promise<void> {
     if (targets.length === 0) {
       throw new Error("No supported projects detected. Expected package.json, requirements.txt/pyproject.toml, pom.xml or build.gradle.");
     }
+    writeJson(path.join(outputDir, "detected-projects.json"), {
+      source: args.source,
+      branch: args.branch || "default",
+      repo_root: repoRoot,
+      projects: targets.map((target) => ({
+        language: target.language,
+        project_path: target.projectPath,
+        id: target.id,
+        framework: target.framework,
+        source_of_truth_type: target.sourceOfTruthType,
+        source_of_truth_files: target.sourceOfTruthFiles,
+        supporting_files: target.supportingFiles,
+        lockfile_present: target.lockfilePresent,
+        lockfile_files: target.lockfileFiles,
+        reproducibility: target.reproducibility,
+        lockfile_warning: target.lockfileWarning || null
+      }))
+    });
     const targetsByLang = groupByLanguage(targets);
     buildLanguageReports(repoRoot, outputDir, targetsByLang, args.threshold, args);
     runGateParser(outputDir, args.threshold);

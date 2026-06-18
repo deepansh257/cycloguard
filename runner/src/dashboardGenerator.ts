@@ -46,6 +46,29 @@ interface SbomSecret {
   start_line?: number | null;
   end_line?: number | null;
 }
+interface ReproducibilityWarning {
+  language?: string;
+  project_id?: string;
+  project_path?: string;
+  source_of_truth_type?: string;
+  source_of_truth_files?: string[];
+  warning?: string;
+}
+interface SourceSelectionEntry {
+  language?: string;
+  project_id?: string;
+  project_path?: string;
+  source_of_truth_type?: string;
+  source_of_truth_files?: string[];
+  supporting_files?: string[];
+  reproducibility?: string;
+}
+interface ReproducibilitySummary {
+  deterministic_projects?: number;
+  non_deterministic_projects?: number;
+  source_selection?: SourceSelectionEntry[];
+  warnings?: ReproducibilityWarning[];
+}
 interface SbomJson {
   gate_failed?: boolean;
   threshold?: string;
@@ -55,6 +78,7 @@ interface SbomJson {
   counts?: Record<string, number>;
   secret_counts?: Record<string, number>;
   finding_counts?: Record<string, number>;
+  reproducibility?: ReproducibilitySummary;
   vulnerabilities?: SbomVuln[];
   secrets?: SbomSecret[];
 }
@@ -142,6 +166,7 @@ interface SbomStats {
   byPackage:  Record<string, number>;
   gateFailed: boolean;
   threshold:  string;
+  reproducibility: ReproducibilitySummary;
 }
 
 function getSbomStats(data: SbomJson): SbomStats {
@@ -175,6 +200,7 @@ function getSbomStats(data: SbomJson): SbomStats {
     byPackage,
     gateFailed: data.gate_failed ?? false,
     threshold:  data.threshold ?? '',
+    reproducibility: data.reproducibility ?? {},
   };
 }
 
@@ -312,6 +338,14 @@ a{color:var(--blue)}
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem}
 @media(max-width:640px){.charts-row{grid-template-columns:1fr}}
 .chart-wrap{position:relative;height:240px}
+.warn-card{background:var(--amber-bg);color:var(--amber-tx);border:1px solid rgba(133,79,11,.18);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1.25rem}
+.warn-card h3{font-size:13px;font-weight:600;margin-bottom:.4rem}
+.warn-card p,.warn-card li{font-size:13px}
+.warn-card ul{margin:.5rem 0 0 1rem}
+.source-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:1.25rem}
+.source-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.source-card h4{font-size:13px;font-weight:600;margin-bottom:6px}
+.source-card p{font-size:12px;color:var(--muted);margin-bottom:4px}
 
 /* section label */
 .section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:1.5rem 0 .75rem}
@@ -365,6 +399,7 @@ tr:hover td{background:var(--surface2)}
   </div>
 
   <div class="scan-meta" id="scan-meta"></div>
+  <div id="repro-warning"></div>
 
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="overview">Overview</div>
@@ -391,6 +426,7 @@ tr:hover td{background:var(--surface2)}
 
     <div id="sbom-overview" style="display:${hasSbom ? '' : 'none'}">
       <div class="section-label">Dependency and secret findings (SBOM)</div>
+      <div id="sbom-source-selection"></div>
       <div class="metrics" id="sbom-metrics"></div>
       <div class="charts-row">
         <div class="card">
@@ -591,6 +627,31 @@ function renderHeader() {
   }
   document.getElementById('scan-meta').innerHTML =
     parts.map(p => '<span>' + p + '</span>').join('');
+
+  const repro = SBOM_STATS?.reproducibility;
+  const warnings = repro?.warnings || [];
+  const warningMount = document.getElementById('repro-warning');
+  if (!warningMount) return;
+  if (!warnings.length) {
+    warningMount.innerHTML = '';
+    return;
+  }
+
+  warningMount.innerHTML = '<div class="warn-card">'
+    + '<h3>Reproducibility warning</h3>'
+    + '<p>Some detected projects do not have a dependency lockfile or an equivalent pinned dependency definition. SBOM generation can still run, but the resolved dependency graph may change between scans.</p>'
+    + '<ul>'
+    + warnings.map((entry) => {
+      const selectedSource = (entry.source_of_truth_files || []).join(', ') || 'fallback manifest';
+      const supportingFiles = (entry.supporting_files || []).join(', ') || 'none';
+      return '<li><strong>' + esc(entry.language || 'unknown') + '</strong> at <span class="mono">' + esc(entry.project_path || entry.project_id || 'unknown') + '</span>: '
+        + esc(entry.warning || '')
+        + '<div class="loc" style="margin-top:4px">Selected source: ' + esc(selectedSource) + ' (' + esc(entry.source_of_truth_type || 'unknown') + ')</div>'
+        + '<div class="loc">Supporting files: ' + esc(supportingFiles) + '</div>'
+        + '</li>';
+    }).join('')
+    + '</ul>'
+    + '</div>';
 }
 
 // ── CBOM overview ─────────────────────────────────────────────────────────────
@@ -624,6 +685,23 @@ function renderCbomOverview() {
 function renderSbomOverview() {
   if (!SBOM_STATS) return;
   const s = SBOM_STATS;
+  const sourceSelectionMount = document.getElementById('sbom-source-selection');
+  if (sourceSelectionMount) {
+    const sourceEntries = s.reproducibility.source_selection || [];
+    sourceSelectionMount.innerHTML = sourceEntries.length
+      ? '<div class="source-grid">' + sourceEntries.map((entry) => {
+        const primary = (entry.source_of_truth_files || []).join(', ') || 'unknown';
+        const supporting = (entry.supporting_files || []).join(', ') || 'none';
+        return '<div class="source-card">'
+          + '<h4>' + esc(entry.language || 'unknown') + ' · ' + esc(entry.project_id || 'root') + '</h4>'
+          + '<p><strong>Primary source:</strong> <span class="mono">' + esc(primary) + '</span></p>'
+          + '<p><strong>Primary type:</strong> ' + esc(entry.source_of_truth_type || 'unknown') + '</p>'
+          + '<p><strong>Supporting files:</strong> <span class="mono">' + esc(supporting) + '</span></p>'
+          + '<p><strong>Reproducibility:</strong> ' + esc(entry.reproducibility || 'unknown') + '</p>'
+          + '</div>';
+      }).join('') + '</div>'
+      : '';
+  }
   document.getElementById('sbom-metrics').innerHTML = [
     ['Dependency CVEs', s.total,                       ''],
     ['Secret findings', s.totalSecrets,               'c-high'],

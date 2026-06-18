@@ -30,6 +30,13 @@ export type ProjectTarget = {
   projectPath: string;
   id: string;
   framework?: "react" | "angular";
+  sourceOfTruthType: "lockfile" | "pinned-manifest" | "manifest" | "build-file";
+  sourceOfTruthFiles: string[];
+  supportingFiles: string[];
+  lockfilePresent: boolean;
+  lockfileFiles: string[];
+  reproducibility: "deterministic" | "non-deterministic";
+  lockfileWarning?: string;
 };
 
 export type RemediationOperation = {

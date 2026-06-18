@@ -13,6 +13,27 @@ type BuildLanguageReportsOptions = {
   persistCycloneDx?: boolean;
 };
 
+function generatePythonSbom(target: ProjectTarget, outFile: string): void {
+  const requirementsFile = path.join(target.projectPath, "requirements.txt");
+  const pyprojectFile = path.join(target.projectPath, "pyproject.toml");
+
+  if (fs.existsSync(requirementsFile)) {
+    run(`cyclonedx-py requirements "${requirementsFile}" -o "${outFile}" --of JSON --sv 1.5`);
+    return;
+  }
+
+  if (fs.existsSync(pyprojectFile)) {
+    try {
+      run(`npx @cyclonedx/cdxgen -t python --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+    } catch {
+      run(`npx @cyclonedx/cdxgen --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+    }
+    return;
+  }
+
+  throw new Error(`Python project missing supported dependency source files: ${target.projectPath}`);
+}
+
 export function generateSbomForTarget(target: ProjectTarget, outDir: string): string {
   const langDir = path.join(outDir, "cyclonedx", target.language);
   ensureDir(langDir);
@@ -20,11 +41,7 @@ export function generateSbomForTarget(target: ProjectTarget, outDir: string): st
   const outFile = path.join(langDir, `${target.id}-cyclonedx.json`);
 
   if (target.language === "python") {
-    const req = path.join(target.projectPath, "requirements.txt");
-    if (!fs.existsSync(req)) {
-      throw new Error(`Python project missing requirements.txt: ${target.projectPath}`);
-    }
-    run(`cyclonedx-py requirements "${req}" -o "${outFile}" --of JSON --sv 1.5`);
+    generatePythonSbom(target, outFile);
   } else {
     const cdxTypeMap: Record<Exclude<Language, "python">, string> = {
       node: "nodejs",

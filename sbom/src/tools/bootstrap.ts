@@ -13,6 +13,15 @@ const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "c
   };
 };
 const logger = createAppLogger({ pino });
+const sbomRoot = path.resolve(__dirname, "..", "..");
+
+function ensureDirectoryInPath(directory: string): void {
+  const currPath = process.env.PATH || "";
+  const delimiter = process.platform === "win32" ? ";" : ":";
+  if (!currPath.toLowerCase().includes(directory.toLowerCase())) {
+    process.env.PATH = `${directory}${delimiter}${currPath}`;
+  }
+}
 
 function findWindowsTrivyBinary(): string | null {
   const localAppData = process.env.LOCALAPPDATA || "";
@@ -63,10 +72,7 @@ function ensureWindowsTrivyInPathIfPresent(): boolean {
 }
 
 function addDirectoryToWindowsPath(directory: string): void {
-  const currPath = process.env.PATH || "";
-  if (!currPath.toLowerCase().includes(directory.toLowerCase())) {
-    process.env.PATH = `${directory};${currPath}`;
-  }
+  ensureDirectoryInPath(directory);
 }
 
 function findWindowsCycloneDxPyDirectory(): string | null {
@@ -133,10 +139,47 @@ function ensureWindowsCycloneDxPyInPathIfPresent(): boolean {
   return true;
 }
 
-export function ensureTools(): void {
-  if (!commandExists("cdxgen")) {
+function ensureLocalCdxgenInPath(): boolean {
+  const localBin = path.join(sbomRoot, "node_modules", ".bin");
+  const commandName = process.platform === "win32" ? "cdxgen.cmd" : "cdxgen";
+  if (!fs.existsSync(path.join(localBin, commandName))) {
+    return false;
+  }
+  ensureDirectoryInPath(localBin);
+  return true;
+}
+
+function ensureCdxgenAvailable(): void {
+  if (commandExists("cdxgen")) {
+    return;
+  }
+
+  if (ensureLocalCdxgenInPath() && commandExists("cdxgen")) {
+    return;
+  }
+
+  const localCacheDir = path.join(sbomRoot, ".npm-cache");
+  fs.mkdirSync(localCacheDir, { recursive: true });
+
+  try {
+    run(
+      `npm install --no-save --prefix "${sbomRoot}" @cyclonedx/cdxgen --cache "${localCacheDir}"`,
+      { displayCommand: "npm install --no-save --prefix <sbom> @cyclonedx/cdxgen" }
+    );
+  } catch {
+    // Fallback to the previous global install path if local install is not possible.
     run("npm install -g @cyclonedx/cdxgen");
   }
+
+  ensureLocalCdxgenInPath();
+
+  if (!commandExists("cdxgen")) {
+    throw new Error("cdxgen was not found after installation. Ensure Node.js/npm can install @cyclonedx/cdxgen.");
+  }
+}
+
+export function ensureTools(): void {
+  ensureCdxgenAvailable();
 
   if (!commandExists("cyclonedx-py")) {
     run("pip install cyclonedx-bom");
