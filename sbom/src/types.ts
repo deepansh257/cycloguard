@@ -15,9 +15,14 @@ export type Args = {
   misconfigScan: boolean;
   enableIssueCreation: boolean;
   enableSlack: boolean;
+  enableRemediation: boolean;
+  enablePrCreation: boolean;
   githubRepo?: string;
   githubToken?: string;
   slackWebhookUrl?: string;
+  remediationBaseBranch?: string;
+  gitUserName: string;
+  gitUserEmail: string;
 };
 
 export type ProjectTarget = {
@@ -25,4 +30,58 @@ export type ProjectTarget = {
   projectPath: string;
   id: string;
   framework?: "react" | "angular";
+};
+
+export type RemediationOperation = {
+  type?: string;
+  file?: string;
+  searchText?: string;
+  replaceText?: string;
+};
+
+export type RemediationPlanItem = {
+  id: string;
+  sourceType?: "sbom" | "cbom";
+  language: Language;
+  fixKind: "dependency" | "code" | "config" | "manual";
+  packageName: string;
+  vulnerabilityId: string;
+  installedVersion?: string;
+  targetVersion: string;
+  severity: string;
+  confidence?: string;
+  rationale?: string;
+  status: string;
+  autoApply?: boolean;
+  targetFile?: string;
+  operations?: RemediationOperation[];
+  notes?: string;
+};
+
+export type RemediationPlan = {
+  plannerMode?: string;
+  createdAt?: string;
+  sourceType?: "sbom" | "cbom";
+  sourceRepo?: string;
+  sourceBranch?: string;
+  threshold?: string;
+  items: RemediationPlanItem[];
+};
+
+export type RemediationApplyResult = {
+  itemId: string;
+  language: Language;
+  packageName: string;
+  targetVersion: string;
+  status: "applied" | "skipped";
+  filesChanged: string[];
+  notes?: string;
+};
+
+export type ValidationResult = {
+  language: Language;
+  targetId: string;
+  command: string;
+  status: "passed" | "failed" | "skipped";
+  notes?: string;
 };

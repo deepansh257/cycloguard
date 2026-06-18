@@ -25,3 +25,7 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+remediation
+cbom/src/remediation
+sbom/src/remediation/

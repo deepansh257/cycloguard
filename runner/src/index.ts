@@ -6,6 +6,15 @@ import { runCbom } from './cbomRunner';
 import { runSbom } from './sbomRunner';
 import { generateDashboard } from './dashboardGenerator';  // ← new
 
+function buildRunFolderName(projectName: string, branch?: string): string {
+  const safeProject = projectName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeBranch = (branch || 'default').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `${safeProject}__${safeBranch}__${stamp}`;
+}
+
 // ── Parse CLI args ────────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -77,8 +86,7 @@ async function main() {
   console.log(`  ✔  Detected: ${techStack.join(', ') || 'unknown'}`);
 
   // ── 3. Prepare output dir ─────────────────────────────────────────────────
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const runDir    = path.join(outputDir, `${projectName}-${timestamp}`);
+  const runDir    = path.join(outputDir, buildRunFolderName(projectName, branch));
   fs.mkdirSync(runDir, { recursive: true });
   console.log(`  ✔  Output: ${runDir}\n`);
 
@@ -86,8 +94,11 @@ async function main() {
   const runCbomScan = scanMode === 'cbom' || scanMode === 'all';
   const runSbomScan = scanMode === 'sbom' || scanMode === 'all';
 
-  const cbomOutputFile = path.join(runDir, 'cbom.json');
-  const sbomOutputDir  = path.join(runDir, 'sbom');
+  const cbomOutputDir = path.join(runDir, 'cbom');
+  const sbomOutputDir = path.join(runDir, 'sbom');
+  fs.mkdirSync(cbomOutputDir, { recursive: true });
+  fs.mkdirSync(sbomOutputDir, { recursive: true });
+  const cbomOutputFile = path.join(cbomOutputDir, 'cbom.json');
 
   const [cbomResult, sbomResult] = await Promise.all([
     runCbomScan

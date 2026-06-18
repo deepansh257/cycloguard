@@ -3,13 +3,18 @@
  * Generates per-target SBOMs, runs Trivy scans, and builds merged outputs.
  */
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { ensureDir, readJson, writeJson } from "../core/fs";
 import { run } from "../core/shell";
 import { Args, Language, ProjectTarget } from "../types";
 
+type BuildLanguageReportsOptions = {
+  persistCycloneDx?: boolean;
+};
+
 export function generateSbomForTarget(target: ProjectTarget, outDir: string): string {
-  const langDir = path.join(outDir, "sbom", target.language);
+  const langDir = path.join(outDir, "cyclonedx", target.language);
   ensureDir(langDir);
 
   const outFile = path.join(langDir, `${target.id}-cyclonedx.json`);
@@ -45,7 +50,7 @@ function scanSbom(sbomFile: string, outFile: string, severity: string): void {
   }
 }
 
-function mergeReports(scanFiles: string[], outFile: string): void {
+function mergeReports(scanFiles: string[], outFile?: string): { Results: any[] } {
   const merged = { Results: [] as any[] };
   for (const f of scanFiles) {
     if (!fs.existsSync(f)) continue;
@@ -53,16 +58,18 @@ function mergeReports(scanFiles: string[], outFile: string): void {
     const results = report?.Results || [];
     merged.Results.push(...results);
   }
-  writeJson(outFile, merged);
+  if (outFile) {
+    writeJson(outFile, merged);
+  }
+  return merged;
 }
 
-function maybeFsScan(repoRoot: string, outDir: string, args: Args): { fsJson: string; sarif: string } {
-  const fsJson = path.join(outDir, "trivy-fs.json");
-  const sarif = path.join(outDir, "trivy-results.sarif");
+function maybeFsScan(repoRoot: string, outDir: string, args: Args): string | null {
+  const trivyDir = path.join(outDir, "trivy");
+  ensureDir(trivyDir);
+  const fsJson = path.join(trivyDir, "filesystem-trivy.json");
   if (!args.fsScan) {
-    writeJson(fsJson, {});
-    writeJson(sarif, { version: "2.1.0", runs: [] });
-    return { fsJson, sarif };
+    return null;
   }
 
   try {
@@ -70,32 +77,14 @@ function maybeFsScan(repoRoot: string, outDir: string, args: Args): { fsJson: st
   } catch {
     writeJson(fsJson, {});
   }
-
-  const scanners = ["vuln"];
-  if (args.secretScan) scanners.push("secret");
-  if (args.misconfigScan) scanners.push("misconfig");
-
-  try {
-    run(`trivy fs "${repoRoot}" --scanners "${scanners.join(",")}" --format sarif --output "${sarif}"`);
-  } catch {
-    writeJson(sarif, { version: "2.1.0", runs: [] });
-  }
-
-  return { fsJson, sarif };
+  return fsJson;
 }
 
-function createTrivyMerged(outDir: string, byLangMerged: Record<Language, string>, fsJson: string): void {
-  const payload = {
+function createTrivyMerged(outDir: string, reports: Record<string, unknown>): void {
+  writeJson(path.join(outDir, "trivy", "merged.json"), {
     scan_prefix: "trivy",
-    reports: {
-      node: readJson(byLangMerged.node),
-      java: readJson(byLangMerged.java),
-      python: readJson(byLangMerged.python),
-      csharp: readJson(byLangMerged.csharp),
-      filesystem: readJson(fsJson)
-    }
-  };
-  writeJson(path.join(outDir, "trivy-merged.json"), payload);
+    reports
+  });
 }
 
 export function buildLanguageReports(
@@ -103,35 +92,46 @@ export function buildLanguageReports(
   outDir: string,
   targetsByLang: Record<Language, ProjectTarget[]>,
   threshold: "critical" | "high",
-  args: Args
+  args: Args,
+  options: BuildLanguageReportsOptions = {}
 ): void {
   const severity = threshold === "critical" ? "CRITICAL" : "HIGH,CRITICAL";
-
-  const mergedByLang: Record<Language, string> = {
-    node: path.join(outDir, "trivy-node.json"),
-    java: path.join(outDir, "trivy-java.json"),
-    python: path.join(outDir, "trivy-python.json"),
-    csharp: path.join(outDir, "trivy-csharp.json")
-  };
+  const trivyDir = path.join(outDir, "trivy");
+  ensureDir(trivyDir);
+  const persistCycloneDx = options.persistCycloneDx !== false;
+  const reportPayloads: Record<string, unknown> = {};
 
   for (const lang of ["node", "java", "python", "csharp"] as Language[]) {
     const scanFiles: string[] = [];
-
-    for (const target of targetsByLang[lang]) {
-      const sbomFile = generateSbomForTarget(target, outDir);
-      const scanFile = path.join(outDir, `${lang}-${target.id}-trivy.json`);
-      scanSbom(sbomFile, scanFile, severity);
-      scanFiles.push(scanFile);
-    }
-
-    if (scanFiles.length === 0) {
-      writeJson(mergedByLang[lang], {});
+    const targets = targetsByLang[lang];
+    if (targets.length === 0) {
       continue;
     }
 
-    mergeReports(scanFiles, mergedByLang[lang]);
+    for (const target of targets) {
+      let sbomFile: string;
+      let tempDir: string | null = null;
+      if (persistCycloneDx) {
+        sbomFile = generateSbomForTarget(target, outDir);
+      } else {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cycloguard-remediate-sbom-"));
+        sbomFile = generateSbomForTarget(target, tempDir);
+      }
+
+      const scanFile = path.join(trivyDir, `${lang}-${target.id}-trivy.json`);
+      scanSbom(sbomFile, scanFile, severity);
+      scanFiles.push(scanFile);
+      if (tempDir) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    reportPayloads[lang] = mergeReports(scanFiles);
   }
 
   const fsResult = maybeFsScan(repoRoot, outDir, args);
-  createTrivyMerged(outDir, mergedByLang, fsResult.fsJson);
+  if (fsResult) {
+    reportPayloads.filesystem = readJson(fsResult);
+  }
+  createTrivyMerged(outDir, reportPayloads);
 }

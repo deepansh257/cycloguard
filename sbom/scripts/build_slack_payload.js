@@ -13,6 +13,7 @@ function readJsonIfExists(filePath, fallback) {
 }
 
 const reportDir = getArg('report-dir');
+const issueResultPath = getArg('issue-result');
 const runUrl = getArg('run-url');
 const output = getArg('output');
 const sourceRepo = getArg('source-repo', 'unknown-repo');
@@ -24,7 +25,7 @@ if (!reportDir || !runUrl || !output) {
 }
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
-const issueResult = readJsonIfExists(path.join(reportDir, 'issue-result.json'), { mode: 'skipped' });
+const issueResult = readJsonIfExists(issueResultPath || path.join(reportDir, 'automation', 'issue-result.json'), { mode: 'skipped' });
 const counts = gate.counts || {};
 const status = gate.gate_failed ? 'FAILED' : 'PASSED';
 const issueText = issueResult.issue_url

@@ -13,6 +13,7 @@ function readJsonIfExists(filePath, fallback) {
 }
 
 const reportDir = getArg('report-dir');
+const issueResultPath = getArg('issue-result');
 const runId = getArg('run-id');
 const runAttempt = getArg('run-attempt');
 const sha = getArg('sha');
@@ -21,6 +22,7 @@ const actor = getArg('actor');
 const sourceRepo = getArg('source-repo', 'unknown-repo');
 const sourceBranch = getArg('source-branch', 'unknown-branch');
 const historyFile = getArg('history-file');
+const output = getArg('output');
 
 if (!reportDir || !runId || !runAttempt || !sha || !ref || !actor) {
   console.error('Missing required args');
@@ -28,7 +30,7 @@ if (!reportDir || !runId || !runAttempt || !sha || !ref || !actor) {
 }
 
 const gate = readJsonIfExists(path.join(reportDir, 'gate-result.json'), {});
-const issueResult = readJsonIfExists(path.join(reportDir, 'issue-result.json'), {});
+const issueResult = readJsonIfExists(issueResultPath || path.join(reportDir, 'automation', 'issue-result.json'), {});
 const indexFile = historyFile || path.join(path.dirname(reportDir), 'history-index.json');
 let history = [];
 
@@ -56,4 +58,4 @@ const entry = {
 
 history.push(entry);
 fs.writeFileSync(indexFile, JSON.stringify(history, null, 2));
-fs.writeFileSync(path.join(reportDir, 'run-summary.json'), JSON.stringify(entry, null, 2));
+fs.writeFileSync(output || path.join(reportDir, 'automation', 'run-summary.json'), JSON.stringify(entry, null, 2));

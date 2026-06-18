@@ -53,7 +53,7 @@ export interface DashboardOptions {
 }
 
 export function generateDashboard(opts: DashboardOptions): string {
-  const cbomFile = path.join(opts.runDir, 'cbom.json');
+  const cbomFile = path.join(opts.runDir, 'cbom', 'cbom.json');
   const sbomFile = path.join(opts.runDir, 'sbom', 'gate-result.json');
 
   // locate the short vulnerability summary JSON inside sbom output dir

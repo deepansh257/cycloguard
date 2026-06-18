@@ -8,7 +8,7 @@ import { readJson } from "../core/fs";
 import { run } from "../core/shell";
 
 export function runGateParser(outDir: string, threshold: "critical" | "high"): void {
-  const mergedFile = path.join(outDir, "trivy-merged.json");
+  const mergedFile = path.join(outDir, "trivy", "merged.json");
   const gateFile = path.join(outDir, "gate-result.json");
   const parserScript = path.resolve(__dirname, "..", "..", "scripts", "parse_trivy_report.js");
   run(`node "${parserScript}" --report-dir "${outDir}" --threshold "${threshold}" --output "${gateFile}"`);

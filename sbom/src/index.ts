@@ -11,7 +11,7 @@ import { detectProjects, groupByLanguage } from "./detectors/projects";
 import { runPostScanAutomation } from "./reports/automation";
 import { runGateParser } from "./reports/gate";
 import { buildLanguageReports } from "./scanner/pipeline";
-import { acquireSource, outputSlugFromSource, resolveGithubRepoIdentifier } from "./source/acquire";
+import { acquireSource, resolveGithubRepoIdentifier } from "./source/acquire";
 import { ensureTools } from "./tools/bootstrap";
 
 async function main(): Promise<void> {
@@ -31,13 +31,6 @@ async function main(): Promise<void> {
     if (targets.length === 0) {
       throw new Error("No supported projects detected. Expected package.json, requirements.txt/pyproject.toml, pom.xml or build.gradle.");
     }
-
-    writeJson(path.join(outputDir, "detected-projects.json"), {
-      source: args.source,
-      repoRoot,
-      detected: targets
-    });
-
     const targetsByLang = groupByLanguage(targets);
     buildLanguageReports(repoRoot, outputDir, targetsByLang, args.threshold, args);
     runGateParser(outputDir, args.threshold);
@@ -45,7 +38,7 @@ async function main(): Promise<void> {
       outputDir,
       sourceRepoLabel,
       sourceBranch: args.branch || "default",
-      historyFile: path.join(path.resolve(args.output), "history-index.json")
+      historyFile: path.join(outputDir, "automation", "history-index.json")
     });
 
     console.log(`\nDone. Reports available at: ${outputDir}`);

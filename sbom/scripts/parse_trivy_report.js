@@ -39,7 +39,7 @@ if (!reportDir || !output) {
   process.exit(1);
 }
 
-const mergedPath = path.join(reportDir, 'trivy-merged.json');
+const mergedPath = path.join(reportDir, 'trivy', 'merged.json');
 const data = JSON.parse(fs.readFileSync(mergedPath, 'utf8'));
 
 let allVulns = [];

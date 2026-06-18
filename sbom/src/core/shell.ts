@@ -5,13 +5,35 @@
 import { execSync } from "child_process";
 import * as path from "path";
 
-export function run(command: string, cwd?: string): void {
-  console.log(`\n$ ${command}`);
+type RunOptions = {
+  cwd?: string;
+  quiet?: boolean;
+  displayCommand?: string;
+};
+
+export function run(command: string, cwdOrOptions?: string | RunOptions): void {
+  const options = typeof cwdOrOptions === "string"
+    ? { cwd: cwdOrOptions }
+    : (cwdOrOptions || {});
+  if (!options.quiet) {
+    console.log(`\n$ ${options.displayCommand || command}`);
+  }
   execSync(command, {
-    cwd,
+    cwd: options.cwd,
     stdio: "inherit",
     env: process.env
   });
+}
+
+export function runCapture(command: string, options: RunOptions = {}): string {
+  if (!options.quiet) {
+    console.log(`\n$ ${options.displayCommand || command}`);
+  }
+  return execSync(command, {
+    cwd: options.cwd,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: process.env
+  }).toString("utf-8");
 }
 
 export function commandExists(command: string): boolean {
