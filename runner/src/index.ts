@@ -53,6 +53,7 @@ async function main() {
   const source = args['source'] as string | undefined;
   const branch = args['branch'] as string | undefined;
   const scanMode = (args['scan'] as string) || 'all';
+  const threshold = (args['threshold'] as string | undefined) || 'high';
   const outputDir = path.resolve((args['output'] as string) || './cycloguard-output');
   const codeqlPath = args['codeql-path'] as string | undefined;
   const noCache = args['no-cache'] === true;
@@ -112,7 +113,7 @@ async function main() {
       ? runCbom({ localPath, outputFile: cbomOutputFile, codeqlPath })
       : Promise.resolve(null),
     runSbomScan
-      ? runSbom({ localPath, outputDir: sbomOutputDir, branch })
+      ? runSbom({ localPath, outputDir: sbomOutputDir, branch, threshold })
       : Promise.resolve(null),
   ]);
 

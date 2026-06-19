@@ -14,6 +14,7 @@ export interface SbomRunnerOptions {
   localPath: string;
   outputDir: string;
   branch?: string;
+  threshold?: string;
 }
 
 export interface SbomRunnerResult {
@@ -49,6 +50,10 @@ export function runSbom(opts: SbomRunnerOptions): Promise<SbomRunnerResult> {
 
     if (opts.branch) {
       args.push('--branch', opts.branch);
+    }
+
+    if (opts.threshold) {
+      args.push('--threshold', opts.threshold);
     }
 
     logger.info('Running SBOM scan...');
