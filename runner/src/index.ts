@@ -6,6 +6,8 @@ import { detectTechStack } from './techDetector';
 import { runCbom } from './cbomRunner';
 import { runSbom } from './sbomRunner';
 import { generateDashboard } from './dashboardGenerator';
+import { notifySlack } from './slack';
+import { loadLocalEnv } from './env';
 
 const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js')) as {
   createAppLogger: (deps: { pino: typeof pino }) => {
@@ -45,6 +47,7 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
 }
 
 async function main() {
+  loadLocalEnv();
   const args = parseArgs(process.argv.slice(2));
 
   const source = args['source'] as string | undefined;
@@ -53,6 +56,8 @@ async function main() {
   const outputDir = path.resolve((args['output'] as string) || './cycloguard-output');
   const codeqlPath = args['codeql-path'] as string | undefined;
   const noCache = args['no-cache'] === true;
+  const enableSlack = args['notify-slack'] !== 'false';
+  const slackWebhookUrl = (args['slack-webhook'] as string | undefined) || process.env.SLACK_WEBHOOK_URL;
 
   if (!source) {
     logger.error('--source is required');
@@ -134,6 +139,19 @@ async function main() {
     logger.info(`Dashboard: ${dashboardFile}`);
   } catch (err: any) {
     logger.warn(`Dashboard generation failed: ${err.message}`);
+  }
+
+  if (enableSlack) {
+    try {
+      await notifySlack({
+        runDir,
+        sourceRepo: source,
+        sourceBranch: branch || 'default',
+        webhookUrl: slackWebhookUrl
+      });
+    } catch (err: any) {
+      logger.warn(`Slack notification failed: ${err.message}`);
+    }
   }
 
   logger.raw('');

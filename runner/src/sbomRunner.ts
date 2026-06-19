@@ -44,6 +44,7 @@ export function runSbom(opts: SbomRunnerOptions): Promise<SbomRunnerResult> {
       'ts-node', 'src/index.ts',
       '--source', opts.localPath,
       '--output', opts.outputDir,
+      '--notify-slack', 'false'
     ];
 
     if (opts.branch) {

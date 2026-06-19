@@ -185,7 +185,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          node sbom/scripts/build_slack_payload.js \
+          node scripts/build_slack_payload.js \
             --report-dir "${{ steps.scan_dir.outputs.dir }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --source-repo "${{ steps.source.outputs.repo }}" \
