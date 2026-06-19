@@ -1,0 +1,22 @@
+{
+  "name": "cycloguard",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "cbom",
+    "sbom",
+    "runner"
+  ],
+  "scripts": {
+    "prepare": "node -e \"if(process.platform!=='win32'){require('fs').chmodSync('bin/cycloguard.sh','755')}\"",
+    "scan": "ts-node -P runner/tsconfig.json runner/src/index.ts",
+    "build": "npm run build --workspaces"
+  },
+  "bin": {
+    "cycloguard": "./bin/cycloguard.js"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  }
+}
