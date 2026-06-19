@@ -5,8 +5,8 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { ensureDir, readJson, writeJson } from "../core/fs";
-import { run } from "../core/shell";
+import { ensureDir, readJson, writeJson } from "../core/file-system-utils";
+import { run } from "../core/shell-command-utils";
 import { Args, Language, ProjectTarget } from "../types";
 
 type BuildLanguageReportsOptions = {

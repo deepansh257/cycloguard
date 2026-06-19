@@ -5,8 +5,8 @@
 import * as path from "path";
 import * as fs from "fs";
 import pino from "pino";
-import { readJson } from "../core/fs";
-import { run } from "../core/shell";
+import { readJson } from "../core/file-system-utils";
+import { run } from "../core/shell-command-utils";
 
 const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "common", "logger.js")) as {
   createAppLogger: (deps: { pino: typeof pino }) => {

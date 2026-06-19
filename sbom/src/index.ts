@@ -5,14 +5,14 @@
  */
 import * as path from "path";
 import pino from "pino";
-import { parseArgs } from "./cli/args";
-import { loadLocalEnv } from "./core/env";
-import { ensureDir, writeJson } from "./core/fs";
-import { detectProjects, groupByLanguage } from "./detectors/projects";
-import { runPostScanAutomation } from "./reports/automation";
-import { runGateParser } from "./reports/gate";
-import { buildLanguageReports } from "./scanner/pipeline";
-import { acquireSource, resolveGithubRepoIdentifier } from "./source/acquire";
+import { parseArgs } from "./cli/command-line-arguments";
+import { loadLocalEnv } from "./core/environment-loader";
+import { ensureDir, writeJson } from "./core/file-system-utils";
+import { detectProjects, groupByLanguage } from "./detectors/project-detector";
+import { runPostScanAutomation } from "./reports/post-scan-automation";
+import { runGateParser } from "./reports/security-gate-evaluator";
+import { buildLanguageReports } from "./scanner/scan-pipeline";
+import { acquireSource, resolveGithubRepoIdentifier } from "./source/source-acquisition";
 import { ensureTools } from "./tools/bootstrap";
 
 const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "common", "logger.js")) as {

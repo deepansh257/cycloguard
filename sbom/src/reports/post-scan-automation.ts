@@ -6,7 +6,7 @@
 import * as fs from "fs";
 import * as https from "https";
 import * as path from "path";
-import { runNodeScript } from "../core/shell";
+import { runNodeScript } from "../core/shell-command-utils";
 import { Args } from "../types";
 
 type AutomationOptions = {

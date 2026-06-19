@@ -5,7 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import pino from "pino";
-import { commandExists, run, runCapture } from "../core/shell";
+import { commandExists, run, runCapture } from "../core/shell-command-utils";
 
 const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "common", "logger.js")) as {
   createAppLogger: (deps: { pino: typeof pino }) => {
