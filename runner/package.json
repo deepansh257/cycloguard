@@ -1,20 +1,22 @@
 {
-  "name": "cycloguard-runner",
+  "name": "@cycloguard/runner",
   "version": "1.0.0",
-  "description": "Simple orchestrator — runs cbom and sbom together",
+  "description": "Orchestrator — runs CBOM and SBOM scans",
   "main": "dist/index.js",
   "bin": {
-    "cycloguard": "./dist/index.js"
+    "cycloguard": "./bin/cycloguard.sh"
   },
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/index.ts",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "scan": "ts-node src/index.ts"
   },
   "dependencies": {
     "pino": "^9.7.0",
     "pino-pretty": "^13.1.1",
-    "simple-git": "^3.19.1"
+    "simple-git": "^3.19.1",
+    "@cycloguard/cbom": "*",
+    "@cycloguard/sbom": "*"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
