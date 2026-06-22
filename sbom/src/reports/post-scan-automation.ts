@@ -48,7 +48,7 @@ function buildRunUrl(outputDir: string): string {
 
 export async function runPostScanAutomation(args: Args, opts: AutomationOptions): Promise<void> {
   const scriptsDir = path.resolve(__dirname, "..", "..", "scripts");
-  const sharedScriptsDir = path.resolve(__dirname, "..", "..", "..", "scripts");
+  const sharedCommonDir = path.resolve(__dirname, "..", "..", "..", "common");
   const gateReport = path.join(opts.outputDir, "gate-result.json");
   const automationDir = path.join(opts.outputDir, "automation");
   fs.mkdirSync(automationDir, { recursive: true });
@@ -75,7 +75,7 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
   }
 
   if (args.enableSlack) {
-    runNodeScript(path.join(sharedScriptsDir, "build_slack_payload.js"), [
+    runNodeScript(path.join(sharedCommonDir, "build_slack_payload.js"), [
       "--report-dir", opts.outputDir,
       "--issue-result", issueResult,
       "--run-url", runUrl,

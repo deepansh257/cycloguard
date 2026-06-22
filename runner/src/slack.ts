@@ -24,7 +24,7 @@ function buildRunUrl(runDir: string): string {
 }
 
 function buildPayload(runDir: string, sourceRepo: string, sourceBranch: string): string | null {
-  const scriptPath = path.resolve(__dirname, '..', '..', 'scripts', 'build_slack_payload.js');
+  const scriptPath = path.resolve(__dirname, '..', '..', 'common', 'build_slack_payload.js');
   const outputPath = path.join(runDir, 'slack-payload.json');
   const issueResultPath = path.join(runDir, 'sbom', 'automation', 'issue-result.json');
 

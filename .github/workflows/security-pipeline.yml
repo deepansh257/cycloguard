@@ -31,7 +31,6 @@ on:
       - 'sbom/**'
       - 'cbom/**'
       - 'runner/**'
-      - 'scripts/**'
       - 'common/**'
   push:
     branches: [ main ]
@@ -41,7 +40,6 @@ on:
       - 'sbom/**'
       - 'cbom/**'
       - 'runner/**'
-      - 'scripts/**'
       - 'common/**'
 
 permissions:

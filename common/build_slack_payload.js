@@ -20,12 +20,12 @@ function loadPino() {
     }
   }
 
-  throw new Error('Unable to resolve pino for scripts/build_slack_payload.js');
+  throw new Error('Unable to resolve pino for common/build_slack_payload.js');
 }
 
 const pino = loadPino();
 process.env.CYCLOGUARD_LOG_FORMAT = process.env.CYCLOGUARD_LOG_FORMAT || 'json';
-const { createAppLogger } = require(path.resolve(__dirname, '..', 'common', 'logger.js'));
+const { createAppLogger } = require(path.resolve(__dirname, 'logger.js'));
 const logger = createAppLogger({ pino });
 
 function getArg(name, fallback = null) {
