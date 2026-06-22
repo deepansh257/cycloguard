@@ -106,6 +106,24 @@ CycloGuard is built so that the same ideas work in both environments:
   - workflow-dispatch support for repository input
   - automation for issue creation, Slack alerts, and report artifacts
 
+## Shared Environment Configuration
+
+Use [`.env.example`](.env.example) as the reference for the root `.env` file.
+
+Example entries used in the project:
+
+```env
+API_GITHUB_TOKEN=your_github_token
+GITHUB_TARGET_REPO=owner/repo
+SLACK_WEBHOOK_URL=slack_webhook_url
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o-mini
+ENABLE_AI_REMEDIATION=true
+REMEDIATION_BASE_BRANCH=main
+GIT_USER_NAME=CycloGuard Bot
+GIT_USER_EMAIL=your-email@example.com
+```
+
 ## Report and Artifact Model
 
 CycloGuard stores outputs in a run-specific directory so each scan remains isolated.
@@ -123,119 +141,10 @@ This makes the framework easier to audit, debug, and extend.
 
 ## Central Logging
 
-CycloGuard uses a centralized `pino` logger implementation shared across `sbom`, `cbom`, and `runner`.
+CycloGuard uses centralized `pino` logging shared across `sbom`, `cbom`, and `runner`.
 
 - Shared implementation:
   - [common/logger.js](common/logger.js)
-- This is the single source of truth for:
-  - log format selection
-  - log level handling
-  - pretty local output vs JSON CI output
-  - shared logger methods
-
-## Pino Usage
-
-The current logger API used across the repo supports these methods:
-
-- `logger.info(message, meta?)`
-  - Use for normal execution flow such as scan start, source resolution, generated output paths, and successful steps.
-- `logger.warn(message, meta?)`
-  - Use for non-blocking problems such as skipped steps, fallback behavior, or partial analysis failures.
-- `logger.error(message, meta?)`
-  - Use for blocking failures or conditions that lead to process exit.
-- `logger.debug(message, meta?)`
-  - Use for detailed diagnostics such as resolved paths, calculated inputs, or troubleshooting-only details.
-- `logger.raw(message)`
-  - Use when terminal-oriented output must be preserved exactly, such as banners, tables, summaries, or progress-friendly output.
-- `logger.command(command)`
-  - Use when printing shell command execution from scanner utilities.
-- `logger.child(component)`
-  - Use when a component-scoped logger is needed with attached context.
-
-## Ways To Add Logs
-
-There are multiple practical ways we add logs with `pino` in this project:
-
-1. Plain message log
-
-```js
-logger.info('Running SBOM scan...');
-```
-
-2. Structured log with metadata
-
-```js
-logger.info('Gate summary generated', {
-  gate_failed: gate.gate_failed,
-  counts: gate.counts
-});
-```
-
-3. Warning log
-
-```js
-logger.warn('Branch not found, cloning default branch instead');
-```
-
-4. Error log
-
-```js
-logger.error('No supported projects detected');
-```
-
-5. Debug log
-
-```js
-logger.debug('Resolved CodeQL query directories', {
-  jsQueriesDir,
-  javaQueriesDir
-});
-```
-
-6. Raw output log
-
-```js
-logger.raw(JSON.stringify(gate, null, 2));
-```
-
-7. Shell command log
-
-```js
-logger.command('trivy --version');
-```
-
-8. Child logger
-
-```js
-const scanLogger = logger.child('scanner');
-scanLogger.info('Starting stack scan');
-```
-
-## Format Control
-
-Local runs default to pretty logs for readability.
-
-CI defaults to JSON logs for machine-friendly output.
-
-Environment variables:
-
-- `CYCLOGUARD_LOG_FORMAT=pretty|json`
-- `CYCLOGUARD_LOG_LEVEL=debug|info|warn|error`
-
-Examples:
-
-```bash
-set CYCLOGUARD_LOG_FORMAT=pretty
-set CYCLOGUARD_LOG_LEVEL=debug
-```
-
-## Logging Guidance
-
-- Prefer `info`, `warn`, `error`, and `debug` for operational logging.
-- Prefer structured metadata when the values may be useful for CI analysis or troubleshooting.
-- Prefer `raw` only when output must remain visually formatted for users.
-- Keep messages short and meaningful.
-- Use `debug` for verbose internals, not for normal run flow.
 
 ## Where To Read More
 
