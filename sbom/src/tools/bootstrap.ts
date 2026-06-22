@@ -14,6 +14,7 @@ const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "c
 };
 const logger = createAppLogger({ pino });
 const sbomRoot = path.resolve(__dirname, "..", "..");
+const trivyInstallScriptUrl = "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh";
 
 function ensureDirectoryInPath(directory: string): void {
   const currPath = process.env.PATH || "";
@@ -75,67 +76,76 @@ function addDirectoryToWindowsPath(directory: string): void {
   ensureDirectoryInPath(directory);
 }
 
-function findWindowsCycloneDxPyDirectory(): string | null {
-  const localAppData = process.env.LOCALAPPDATA || "";
-  const appData = process.env.APPDATA || "";
-  const userProfile = process.env.USERPROFILE || "";
+function canRunShellCommand(command: string): boolean {
+  try {
+    runCapture(command, { quiet: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  const directCandidates = [
-    path.join(localAppData, "Programs", "Python", "Python314", "Scripts"),
-    path.join(localAppData, "Programs", "Python", "Python313", "Scripts"),
-    path.join(localAppData, "Programs", "Python", "Python312", "Scripts"),
-    path.join(localAppData, "Programs", "Python", "Python311", "Scripts"),
-    path.join(localAppData, "Python", "pythoncore-3.14-64", "Scripts"),
-    path.join(localAppData, "Python", "pythoncore-3.13-64", "Scripts"),
-    path.join(localAppData, "Python", "pythoncore-3.12-64", "Scripts"),
-    path.join(localAppData, "Python", "pythoncore-3.11-64", "Scripts"),
-    path.join(appData, "Python", "Python314", "Scripts"),
-    path.join(appData, "Python", "Python313", "Scripts"),
-    path.join(appData, "Python", "Python312", "Scripts"),
-    path.join(appData, "Python", "Python311", "Scripts"),
-    path.join(userProfile, "AppData", "Roaming", "Python", "Python314", "Scripts"),
-    path.join(userProfile, "AppData", "Roaming", "Python", "Python313", "Scripts"),
-    path.join(userProfile, "AppData", "Roaming", "Python", "Python312", "Scripts"),
-    path.join(userProfile, "AppData", "Roaming", "Python", "Python311", "Scripts")
-  ];
+function hasCycloneDxCommand(directory: string): boolean {
+  const files = process.platform === "win32"
+    ? ["cyclonedx-py.exe", "cyclonedx-py-script.py", "cyclonedx-py"]
+    : ["cyclonedx-py"];
+  return files.some((file) => fs.existsSync(path.join(directory, file)));
+}
 
-  const hasCycloneDxCommand = (directory: string): boolean => {
-    const files = ["cyclonedx-py.exe", "cyclonedx-py-script.py", "cyclonedx-py"];
-    return files.some((file) => fs.existsSync(path.join(directory, file)));
-  };
+function getAvailablePythonCommands(): string[] {
+  const candidates = process.platform === "win32"
+    ? ["py -3", "python", "py"]
+    : ["python3", "python"];
 
-  for (const candidate of directCandidates) {
-    if (candidate && fs.existsSync(candidate) && hasCycloneDxCommand(candidate)) {
-      return candidate;
+  return [...new Set(candidates)].filter((command) => canRunShellCommand(`${command} --version`));
+}
+
+function getPythonScriptsDirectory(pythonCommand: string): string | null {
+  const script = [
+    "import os,site,sysconfig",
+    "scripts=sysconfig.get_path('scripts') or ''",
+    "user_base=getattr(site,'USER_BASE','') or ''",
+    "user_scripts=os.path.join(user_base, 'Scripts' if os.name=='nt' else 'bin') if user_base else ''",
+    "print('\\n'.join([scripts, user_scripts]))"
+  ].join("; ");
+
+  try {
+    const output = runCapture(
+      `${pythonCommand} -c "${script.replace(/"/g, '\\"')}"`,
+      { quiet: true, displayCommand: `${pythonCommand} -c <resolve-python-scripts-dir>` }
+    );
+
+    for (const line of output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
+      if (fs.existsSync(line)) {
+        return line;
+      }
     }
+  } catch {
+    return null;
   }
 
-  const pythonCommands = ["python", "py"];
-  for (const pythonCommand of pythonCommands) {
-    if (!commandExists(pythonCommand)) {
-      continue;
-    }
+  return null;
+}
 
-    try {
-      const scriptsDir = runCapture(
-        `${pythonCommand} -c "import sysconfig; print(sysconfig.get_path('scripts') or '')"`,
-        { quiet: true }
-      ).trim();
-      if (scriptsDir && fs.existsSync(scriptsDir) && hasCycloneDxCommand(scriptsDir)) {
-        return scriptsDir;
-      }
-    } catch {
-      continue;
+function findCycloneDxPyDirectory(pythonCommands: string[]): string | null {
+  for (const pythonCommand of pythonCommands) {
+    const scriptsDir = getPythonScriptsDirectory(pythonCommand);
+    if (scriptsDir && hasCycloneDxCommand(scriptsDir)) {
+      return scriptsDir;
     }
   }
 
   return null;
 }
 
-function ensureWindowsCycloneDxPyInPathIfPresent(): boolean {
-  const scriptsDir = findWindowsCycloneDxPyDirectory();
+function ensureCycloneDxPyInPathIfPresent(pythonCommands: string[]): boolean {
+  const scriptsDir = findCycloneDxPyDirectory(pythonCommands);
   if (!scriptsDir) return false;
-  addDirectoryToWindowsPath(scriptsDir);
+  if (process.platform === "win32") {
+    addDirectoryToWindowsPath(scriptsDir);
+  } else {
+    ensureDirectoryInPath(scriptsDir);
+  }
   return true;
 }
 
@@ -178,18 +188,100 @@ function ensureCdxgenAvailable(): void {
   }
 }
 
-export function ensureTools(): void {
-  ensureCdxgenAvailable();
-
-  if (!commandExists("cyclonedx-py")) {
-    run("pip install cyclonedx-bom");
-    if (process.platform === "win32") {
-      ensureWindowsCycloneDxPyInPathIfPresent();
+function installCycloneDxPy(pythonCommands: string[]): void {
+  for (const pythonCommand of pythonCommands) {
+    try {
+      run(`${pythonCommand} -m pip install cyclonedx-bom`, {
+        displayCommand: `${pythonCommand} -m pip install cyclonedx-bom`
+      });
+      return;
+    } catch {
+      continue;
     }
   }
 
-  if (process.platform === "win32" && !commandExists("cyclonedx-py")) {
-    ensureWindowsCycloneDxPyInPathIfPresent();
+  if (commandExists("pip3")) {
+    run("pip3 install cyclonedx-bom");
+    return;
+  }
+
+  if (commandExists("pip")) {
+    run("pip install cyclonedx-bom");
+    return;
+  }
+
+  throw new Error(
+    "Python/pip was not found for cyclonedx-bom installation. Install Python 3 with pip and retry."
+  );
+}
+
+function installTrivyOnLinux(): void {
+  if (commandExists("apt-get")) {
+    run("sudo apt-get update");
+    run("sudo apt-get install -y wget gnupg lsb-release");
+    run("wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -");
+    run("echo \"deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main\" | sudo tee /etc/apt/sources.list.d/trivy.list");
+    run("sudo apt-get update");
+    run("sudo apt-get install -y trivy");
+    return;
+  }
+
+  if (commandExists("dnf")) {
+    run("sudo dnf install -y trivy");
+    return;
+  }
+
+  if (commandExists("yum")) {
+    run("sudo yum install -y trivy");
+    return;
+  }
+
+  if (commandExists("zypper")) {
+    run("sudo zypper --non-interactive install trivy");
+    return;
+  }
+
+  if (commandExists("pacman")) {
+    run("sudo pacman -Sy --noconfirm trivy");
+    return;
+  }
+
+  if (commandExists("apk")) {
+    run("sudo apk add --no-cache trivy");
+    return;
+  }
+
+  if (commandExists("brew")) {
+    run("brew install trivy");
+    return;
+  }
+
+  if (commandExists("curl")) {
+    run(`curl -sfL ${trivyInstallScriptUrl} | sudo sh -s -- -b /usr/local/bin`);
+    return;
+  }
+
+  if (commandExists("wget")) {
+    run(`wget -qO - ${trivyInstallScriptUrl} | sudo sh -s -- -b /usr/local/bin`);
+    return;
+  }
+
+  throw new Error(
+    "Trivy not found and no supported installer was detected for this Linux environment.\n" +
+    "Install Trivy manually: https://github.com/aquasecurity/trivy/releases"
+  );
+}
+
+export function ensureTools(): void {
+  ensureCdxgenAvailable();
+  const pythonCommands = getAvailablePythonCommands();
+
+  if (!commandExists("cyclonedx-py")) {
+    installCycloneDxPy(pythonCommands);
+  }
+
+  if (!commandExists("cyclonedx-py")) {
+    ensureCycloneDxPyInPathIfPresent(pythonCommands);
   }
 
   if (!commandExists("cyclonedx-py")) {
@@ -223,12 +315,7 @@ export function ensureTools(): void {
         );
       }
     } else {
-      run("sudo apt-get update");
-      run("sudo apt-get install -y wget gnupg lsb-release");
-      run("wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -");
-      run("echo \"deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main\" | sudo tee /etc/apt/sources.list.d/trivy.list");
-      run("sudo apt-get update");
-      run("sudo apt-get install -y trivy");
+      installTrivyOnLinux();
     }
   }
 
