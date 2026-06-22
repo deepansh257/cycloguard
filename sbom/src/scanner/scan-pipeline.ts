@@ -13,20 +13,50 @@ type BuildLanguageReportsOptions = {
   persistCycloneDx?: boolean;
 };
 
+let cachedCycloneDxSpecVersion: string | null = null;
+
+function getCycloneDxSpecVersion(): string {
+  if (cachedCycloneDxSpecVersion) {
+    return cachedCycloneDxSpecVersion;
+  }
+
+  const envVersion = process.env.CYCLOGUARD_CYCLONEDX_SPEC_VERSION?.trim();
+  if (envVersion) {
+    cachedCycloneDxSpecVersion = envVersion;
+    return cachedCycloneDxSpecVersion;
+  }
+
+  const packageJsonPath = path.resolve(__dirname, "..", "..", "package.json");
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    const packageVersion = packageJson?.cycloguard?.cyclonedxSpecVersion;
+    if (typeof packageVersion === "string" && packageVersion.trim()) {
+      cachedCycloneDxSpecVersion = packageVersion.trim();
+      return cachedCycloneDxSpecVersion;
+    }
+  } catch {
+    // Fallback below keeps runtime stable even if package metadata is unavailable.
+  }
+
+  cachedCycloneDxSpecVersion = "1.5";
+  return cachedCycloneDxSpecVersion;
+}
+
 function generatePythonSbom(target: ProjectTarget, outFile: string): void {
   const requirementsFile = path.join(target.projectPath, "requirements.txt");
   const pyprojectFile = path.join(target.projectPath, "pyproject.toml");
+  const cycloneDxSpecVersion = getCycloneDxSpecVersion();
 
   if (fs.existsSync(requirementsFile)) {
-    run(`cyclonedx-py requirements "${requirementsFile}" -o "${outFile}" --of JSON --sv 1.5`);
+    run(`cyclonedx-py requirements "${requirementsFile}" -o "${outFile}" --of JSON --sv ${cycloneDxSpecVersion}`);
     return;
   }
 
   if (fs.existsSync(pyprojectFile)) {
     try {
-      run(`npx @cyclonedx/cdxgen -t python --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+      run(`npx @cyclonedx/cdxgen -t python --spec-version ${cycloneDxSpecVersion} -o "${outFile}" "${target.projectPath}"`);
     } catch {
-      run(`npx @cyclonedx/cdxgen --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+      run(`npx @cyclonedx/cdxgen --spec-version ${cycloneDxSpecVersion} -o "${outFile}" "${target.projectPath}"`);
     }
     return;
   }
@@ -37,6 +67,7 @@ function generatePythonSbom(target: ProjectTarget, outFile: string): void {
 export function generateSbomForTarget(target: ProjectTarget, outDir: string): string {
   const langDir = path.join(outDir, "cyclonedx", target.language);
   ensureDir(langDir);
+  const cycloneDxSpecVersion = getCycloneDxSpecVersion();
 
   const outFile = path.join(langDir, `${target.id}-cyclonedx.json`);
 
@@ -50,9 +81,9 @@ export function generateSbomForTarget(target: ProjectTarget, outDir: string): st
     };
     const cdxType = cdxTypeMap[target.language as Exclude<Language, "python">];
     try {
-      run(`npx @cyclonedx/cdxgen -t ${cdxType} --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+      run(`npx @cyclonedx/cdxgen -t ${cdxType} --spec-version ${cycloneDxSpecVersion} -o "${outFile}" "${target.projectPath}"`);
     } catch {
-      run(`npx @cyclonedx/cdxgen --spec-version 1.5 -o "${outFile}" "${target.projectPath}"`);
+      run(`npx @cyclonedx/cdxgen --spec-version ${cycloneDxSpecVersion} -o "${outFile}" "${target.projectPath}"`);
     }
   }
 

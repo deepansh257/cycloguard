@@ -2,6 +2,9 @@
   "name": "@cycloguard/sbom",
   "version": "1.0.0",
   "description": "SBOM scanner using cdxgen and Trivy",
+  "cycloguard": {
+    "cyclonedxSpecVersion": "1.5"
+  },
   "main": "dist/index.js",
   "type": "commonjs",
   "scripts": {
