@@ -15,3 +15,11 @@ export function writeJson(filePath: string, data: unknown): void {
 export function readJson(filePath: string): any {
   return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
+
+export function readText(filePath: string): string {
+  return fs.readFileSync(filePath, "utf-8");
+}
+
+export function writeText(filePath: string, data: string): void {
+  fs.writeFileSync(filePath, data, "utf-8");
+}

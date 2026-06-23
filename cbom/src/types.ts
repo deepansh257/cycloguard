@@ -27,7 +27,10 @@ export interface ScanOptions {
   exclude?: string[];      
   branch?: string;          
   useCodeQL?: boolean;
-  codeqlPath?: string;      
+  codeqlPath?: string;
+  githubRepo?: string;
+  githubToken?: string;
+  createPr?: boolean;
 }
 
 export interface ScanResult {

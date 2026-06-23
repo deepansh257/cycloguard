@@ -1,7 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import pino from 'pino';
 import simpleGit from 'simple-git';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 export interface GitSourceResult {
   localPath: string;
@@ -30,8 +39,8 @@ function isCachedRepoValid(cacheDir: string): boolean {
 export function isGitHubUrl(input: string): boolean {
   return (
     input.startsWith('https://github.com') ||
-    input.startsWith('http://github.com')  ||
-    input.startsWith('git@github.com')     ||
+    input.startsWith('http://github.com') ||
+    input.startsWith('git@github.com') ||
     input.startsWith('https://gitlab.com') ||
     input.startsWith('https://bitbucket.org')
   );
@@ -48,21 +57,21 @@ export async function cloneRepository(
   verbose: boolean = false
 ): Promise<GitSourceResult> {
   const projectName = extractProjectName(url);
-  const cacheDir    = getCacheDir(url, branch);
+  const cacheDir = getCacheDir(url, branch);
   if (isCachedRepoValid(cacheDir)) {
     if (verbose) {
-      console.log(`  Using cached clone at ${cacheDir} (skipping network clone)`);
+      logger.info(`Using cached clone at ${cacheDir} (skipping network clone)`);
     }
     return {
-      localPath:   cacheDir,
+      localPath: cacheDir,
       projectName,
-      isTemp:      false,
-      cleanup:     () => {},
+      isTemp: false,
+      cleanup: () => {},
     };
   }
   fs.mkdirSync(cacheDir, { recursive: true });
   if (verbose) {
-    console.log(`  Cloning ${url} into cache at ${cacheDir}...`);
+    logger.info(`Cloning ${url} into cache at ${cacheDir}...`);
   }
 
   const git = simpleGit();
@@ -74,7 +83,7 @@ export async function cloneRepository(
   } catch (err: any) {
     if (branch && err?.message?.includes('not found')) {
       if (verbose) {
-        console.log(`  Branch '${branch}' not found, cloning default branch...`);
+        logger.warn(`Branch '${branch}' not found, cloning default branch...`);
       }
       await git.clone(url, cacheDir, ['--depth', '1']);
     } else {
@@ -84,10 +93,10 @@ export async function cloneRepository(
   }
 
   return {
-    localPath:   cacheDir,
+    localPath: cacheDir,
     projectName,
-    isTemp:      false,
-    cleanup:     () => {},
+    isTemp: false,
+    cleanup: () => {},
   };
 }
 
@@ -97,10 +106,10 @@ export function resolveLocalSource(inputPath: string): GitSourceResult {
     throw new Error(`Path does not exist: ${resolved}`);
   }
   return {
-    localPath:   resolved,
+    localPath: resolved,
     projectName: path.basename(resolved),
-    isTemp:      false,
-    cleanup:     () => {},
+    isTemp: false,
+    cleanup: () => {},
   };
 }
 

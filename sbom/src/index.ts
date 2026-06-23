@@ -4,15 +4,26 @@
  * scanning pipeline execution, and gate evaluation.
  */
 import * as path from "path";
-import { parseArgs } from "./cli/args";
-import { loadLocalEnv } from "./core/env";
-import { ensureDir, writeJson } from "./core/fs";
-import { detectProjects, groupByLanguage } from "./detectors/projects";
-import { runPostScanAutomation } from "./reports/automation";
-import { runGateParser } from "./reports/gate";
-import { buildLanguageReports } from "./scanner/pipeline";
-import { acquireSource, outputSlugFromSource, resolveGithubRepoIdentifier } from "./source/acquire";
+import pino from "pino";
+import { parseArgs } from "./cli/command-line-arguments";
+import { loadLocalEnv } from "./core/environment-loader";
+import { ensureDir, writeJson } from "./core/file-system-utils";
+import { detectProjects, groupByLanguage } from "./detectors/project-detector";
+import { runPostScanAutomation } from "./reports/post-scan-automation";
+import { runGateParser } from "./reports/security-gate-evaluator";
+import { buildLanguageReports } from "./scanner/scan-pipeline";
+import { acquireSource, resolveGithubRepoIdentifier } from "./source/source-acquisition";
 import { ensureTools } from "./tools/bootstrap";
+
+const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "common", "logger.js")) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+    error: (message: string, meta?: Record<string, unknown>) => void;
+    raw: (message: string) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 async function main(): Promise<void> {
   loadLocalEnv();
@@ -22,7 +33,7 @@ async function main(): Promise<void> {
 
   const { repoRoot, cleanup } = acquireSource(args);
   try {
-    console.log(`Using source at: ${repoRoot}`);
+    logger.info(`Using source at: ${repoRoot}`);
     ensureTools();
     const effectiveGithubRepo = resolveGithubRepoIdentifier(args.source, repoRoot, args.githubRepo);
     const sourceRepoLabel = effectiveGithubRepo || args.source;
@@ -31,13 +42,24 @@ async function main(): Promise<void> {
     if (targets.length === 0) {
       throw new Error("No supported projects detected. Expected package.json, requirements.txt/pyproject.toml, pom.xml or build.gradle.");
     }
-
     writeJson(path.join(outputDir, "detected-projects.json"), {
       source: args.source,
-      repoRoot,
-      detected: targets
+      branch: args.branch || "default",
+      repo_root: repoRoot,
+      projects: targets.map((target) => ({
+        language: target.language,
+        project_path: target.projectPath,
+        id: target.id,
+        framework: target.framework,
+        source_of_truth_type: target.sourceOfTruthType,
+        source_of_truth_files: target.sourceOfTruthFiles,
+        supporting_files: target.supportingFiles,
+        lockfile_present: target.lockfilePresent,
+        lockfile_files: target.lockfileFiles,
+        reproducibility: target.reproducibility,
+        lockfile_warning: target.lockfileWarning || null
+      }))
     });
-
     const targetsByLang = groupByLanguage(targets);
     buildLanguageReports(repoRoot, outputDir, targetsByLang, args.threshold, args);
     runGateParser(outputDir, args.threshold);
@@ -45,16 +67,16 @@ async function main(): Promise<void> {
       outputDir,
       sourceRepoLabel,
       sourceBranch: args.branch || "default",
-      historyFile: path.join(path.resolve(args.output), "history-index.json")
+      historyFile: path.join(outputDir, "automation", "history-index.json")
     });
 
-    console.log(`\nDone. Reports available at: ${outputDir}`);
+    logger.info(`Done. Reports available at: ${outputDir}`);
   } finally {
     if (cleanup) cleanup();
   }
 }
 
 main().catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  logger.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

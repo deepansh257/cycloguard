@@ -16,6 +16,8 @@
     "commander": "^11.0.0",
     "glob": "^10.3.0",
     "ora": "^5.4.1",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.1.1",
     "simple-git": "^3.22.0",
     "table": "^6.8.1",
     "tree-sitter": "^0.21.1",

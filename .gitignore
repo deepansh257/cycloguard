@@ -14,6 +14,7 @@ runs/
 # Environment
 .env
 .env.*
+!.env.example
 
 # OS
 .DS_Store
@@ -25,3 +26,7 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+remediation
+cbom/src/remediation
+sbom/src/remediation/

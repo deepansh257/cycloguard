@@ -5,6 +5,15 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { getRegistry } from '../registry/registryLoader';
+import pino from 'pino';
+
+const { createAppLogger } = require(path.resolve(__dirname, '..', '..', '..', 'common', 'logger.js')) as {
+  createAppLogger: (deps: { pino: typeof pino }) => {
+    info: (message: string, meta?: Record<string, unknown>) => void;
+    warn: (message: string, meta?: Record<string, unknown>) => void;
+  };
+};
+const logger = createAppLogger({ pino });
 
 export interface CodeQLRunnerOptions {
   codeqlPath?:       string;
@@ -1172,7 +1181,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
   const hasCSharp = opts.includeCSharp  ?? detectCSharpInSource(opts.sourceRoot);
 
   if (!hasJS && !hasJava && !hasPython && !hasCSharp) {
-    console.log('No supported source files detected — skipping CodeQL analysis.');
+    logger.info('No supported source files detected — skipping CodeQL analysis.');
     return [];
   }
 
@@ -1181,7 +1190,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
   // ── JS/TS block ──────────────────────────────────────────────────────────────
   if (hasJS) {
-    console.log('\nCodeQL: JS/TS source detected.');
+    logger.info('\nCodeQL: JS/TS source detected.');
 
     const jsGeneratedDir = path.join(generatedBase, 'js');
     fs.mkdirSync(jsGeneratedDir, { recursive: true });
@@ -1202,9 +1211,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
     try {
       if (isDbReusable(jsDbDir, fingerprint)) {
-        console.log('  Reusing existing JS/TS CodeQL DB (no code changes detected).');
+        logger.info('  Reusing existing JS/TS CodeQL DB (no code changes detected).');
       } else {
-        console.log('  Creating CodeQL JS/TS database...');
+        logger.info('  Creating CodeQL JS/TS database...');
         const dbResult = await spawnAsync(
           codeqlBin,
           [
@@ -1218,7 +1227,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           { timeout: 15 * 60 * 1000, label: 'JS DB' }
         );
         if (dbResult.status !== 0) {
-          console.warn('  WARNING: JS/TS CodeQL DB creation failed:\n', dbResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: JS/TS CodeQL DB creation failed:\n${dbResult.stderr.slice(-1000)}`);
           safeRm(jsDbDir);
         } else {
           saveDbFingerprint(jsDbDir, fingerprint);
@@ -1226,7 +1235,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
       }
 
       if (fs.existsSync(jsDbDir)) {
-        console.log(`  Running JS/TS CodeQL analysis (${jsQueries.length} queries)...`);
+        logger.info(`  Running JS/TS CodeQL analysis (${jsQueries.length} queries)...`);
         const analyzeResult = await spawnAsync(
           codeqlBin,
           [
@@ -1244,9 +1253,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           const sarif = JSON.parse(fs.readFileSync(jsSarif, 'utf8'));
           const jsFindings = parseSARIF(sarif, opts.sourceRoot);
           allResults.push(...jsFindings);
-          console.log(`  JS/TS CodeQL: ${jsFindings.length} finding(s)`);
+          logger.info(`  JS/TS CodeQL: ${jsFindings.length} finding(s)`);
         } else if (analyzeResult.status !== 0) {
-          console.warn('  WARNING: JS/TS analysis failed:\n', analyzeResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: JS/TS analysis failed:\n${analyzeResult.stderr.slice(-1000)}`);
         }
       }
     } finally {
@@ -1257,7 +1266,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
   // ── Java block ───────────────────────────────────────────────────────────────
   if (hasJava) {
-    console.log('\nCodeQL: Java source detected — running Java crypto queries...');
+    logger.info('\nCodeQL: Java source detected — running Java crypto queries...');
 
     const javaGeneratedDir = path.join(generatedBase, 'java');
     fs.mkdirSync(javaGeneratedDir, { recursive: true });
@@ -1287,9 +1296,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
     try {
       if (isDbReusable(javaDbDir, fingerprint)) {
-        console.log('  Reusing existing Java CodeQL DB (no code changes detected).');
+        logger.info('  Reusing existing Java CodeQL DB (no code changes detected).');
       } else {
-        console.log('  Creating CodeQL Java database (this may take several minutes for large repos)...');
+        logger.info('  Creating CodeQL Java database (this may take several minutes for large repos)...');
         const javaDbResult = await spawnAsync(
           codeqlBin,
           [
@@ -1304,11 +1313,10 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           { timeout: 45 * 60 * 1000, label: 'Java DB' }
         );
         if (javaDbResult.status !== 0) {
-          console.warn(
+          logger.warn(
             '  WARNING: Java CodeQL DB creation failed. ' +
             'If the repo requires compilation, ensure the build system is available ' +
-            'or remove --build-mode=none to allow autobuilding.\n',
-            javaDbResult.stderr.slice(-2000)
+            `or remove --build-mode=none to allow autobuilding.\n${javaDbResult.stderr.slice(-2000)}`
           );
           safeRm(javaDbDir);
         } else {
@@ -1317,7 +1325,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
       }
 
       if (fs.existsSync(javaDbDir)) {
-        console.log(`  Running Java CodeQL analysis (${javaQueryPaths.length} queries)...`);
+        logger.info(`  Running Java CodeQL analysis (${javaQueryPaths.length} queries)...`);
         const javaAnalyzeResult = await spawnAsync(
           codeqlBin,
           [
@@ -1335,9 +1343,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           const sarif = JSON.parse(fs.readFileSync(javaSarif, 'utf8'));
           const javaFindings = parseSARIF(sarif, opts.sourceRoot);
           allResults.push(...javaFindings);
-          console.log(`  Java CodeQL: ${javaFindings.length} finding(s)`);
+          logger.info(`  Java CodeQL: ${javaFindings.length} finding(s)`);
         } else if (javaAnalyzeResult.status !== 0) {
-          console.warn('  WARNING: Java analysis failed:\n', javaAnalyzeResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: Java analysis failed:\n${javaAnalyzeResult.stderr.slice(-1000)}`);
         }
       }
     } finally {
@@ -1349,7 +1357,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
   // ── Python block ─────────────────────────────────────────────────────────────
   if (hasPython) {
-    console.log('\nCodeQL: Python source detected — running Python crypto queries...');
+    logger.info('\nCodeQL: Python source detected — running Python crypto queries...');
 
     const pythonGeneratedDir = path.join(generatedBase, 'python');
     fs.mkdirSync(pythonGeneratedDir, { recursive: true });
@@ -1378,9 +1386,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
     try {
       if (isDbReusable(pythonDbDir, fingerprint)) {
-        console.log('  Reusing existing Python CodeQL DB (no code changes detected).');
+        logger.info('  Reusing existing Python CodeQL DB (no code changes detected).');
       } else {
-        console.log('  Creating CodeQL Python database...');
+        logger.info('  Creating CodeQL Python database...');
         const pythonDbResult = await spawnAsync(
           codeqlBin,
           [
@@ -1394,7 +1402,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           { timeout: 20 * 60 * 1000, label: 'Python DB' }
         );
         if (pythonDbResult.status !== 0) {
-          console.warn('  WARNING: Python CodeQL DB creation failed:\n', pythonDbResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: Python CodeQL DB creation failed:\n${pythonDbResult.stderr.slice(-1000)}`);
           safeRm(pythonDbDir);
         } else {
           saveDbFingerprint(pythonDbDir, fingerprint);
@@ -1402,7 +1410,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
       }
 
       if (fs.existsSync(pythonDbDir)) {
-        console.log(`  Running Python CodeQL analysis (${pythonQueryPaths.length} queries)...`);
+        logger.info(`  Running Python CodeQL analysis (${pythonQueryPaths.length} queries)...`);
         const pythonAnalyzeResult = await spawnAsync(
           codeqlBin,
           [
@@ -1420,9 +1428,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           const sarif = JSON.parse(fs.readFileSync(pythonSarif, 'utf8'));
           const pythonFindings = parseSARIF(sarif, opts.sourceRoot);
           allResults.push(...pythonFindings);
-          console.log(`  Python CodeQL: ${pythonFindings.length} finding(s)`);
+          logger.info(`  Python CodeQL: ${pythonFindings.length} finding(s)`);
         } else if (pythonAnalyzeResult.status !== 0) {
-          console.warn('  WARNING: Python analysis failed:\n', pythonAnalyzeResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: Python analysis failed:\n${pythonAnalyzeResult.stderr.slice(-1000)}`);
         }
       }
     } finally {
@@ -1434,7 +1442,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
   // ── C# block ─────────────────────────────────────────────────────────────────
   if (hasCSharp) {
-    console.log('\nCodeQL: C# source detected — running C# crypto queries...');
+    logger.info('\nCodeQL: C# source detected — running C# crypto queries...');
 
     const csharpGeneratedDir = path.join(generatedBase, 'csharp');
     fs.mkdirSync(csharpGeneratedDir, { recursive: true });
@@ -1463,9 +1471,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
 
     try {
       if (isDbReusable(csharpDbDir, fingerprint)) {
-        console.log('  Reusing existing C# CodeQL DB (no code changes detected).');
+        logger.info('  Reusing existing C# CodeQL DB (no code changes detected).');
       } else {
-        console.log('  Creating CodeQL C# database (may require dotnet build for older targets)...');
+        logger.info('  Creating CodeQL C# database (may require dotnet build for older targets)...');
         const csharpDbResult = await spawnAsync(
           codeqlBin,
           [
@@ -1480,11 +1488,10 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           { timeout: 45 * 60 * 1000, label: 'CSharp DB' }
         );
         if (csharpDbResult.status !== 0) {
-          console.warn(
+          logger.warn(
             '  WARNING: C# CodeQL DB creation failed. ' +
             'If the repo requires compilation, ensure dotnet SDK is available ' +
-            'or remove --build-mode=none to allow autobuilding.\n',
-            csharpDbResult.stderr.slice(-2000)
+            `or remove --build-mode=none to allow autobuilding.\n${csharpDbResult.stderr.slice(-2000)}`
           );
           safeRm(csharpDbDir);
         } else {
@@ -1493,7 +1500,7 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
       }
 
       if (fs.existsSync(csharpDbDir)) {
-        console.log(`  Running C# CodeQL analysis (${csharpQueryPaths.length} queries)...`);
+        logger.info(`  Running C# CodeQL analysis (${csharpQueryPaths.length} queries)...`);
         const csharpAnalyzeResult = await spawnAsync(
           codeqlBin,
           [
@@ -1511,9 +1518,9 @@ export async function runCodeQL(opts: CodeQLRunnerOptions): Promise<SARIFResult[
           const sarif = JSON.parse(fs.readFileSync(csharpSarif, 'utf8'));
           const csharpFindings = parseSARIF(sarif, opts.sourceRoot);
           allResults.push(...csharpFindings);
-          console.log(`  C# CodeQL: ${csharpFindings.length} finding(s)`);
+          logger.info(`  C# CodeQL: ${csharpFindings.length} finding(s)`);
         } else if (csharpAnalyzeResult.status !== 0) {
-          console.warn('  WARNING: C# analysis failed:\n', csharpAnalyzeResult.stderr.slice(-1000));
+          logger.warn(`  WARNING: C# analysis failed:\n${csharpAnalyzeResult.stderr.slice(-1000)}`);
         }
       }
     } finally {
@@ -1577,3 +1584,5 @@ function parseSARIF(sarif: any, sourceRoot: string): SARIFResult[] {
 
   return results;
 }
+
+

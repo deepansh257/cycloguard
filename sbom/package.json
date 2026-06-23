@@ -2,12 +2,19 @@
   "name": "@cycloguard/sbom",
   "version": "1.0.0",
   "description": "SBOM scanner using cdxgen and Trivy",
+  "cycloguard": {
+    "cyclonedxSpecVersion": "1.5"
+  },
   "main": "dist/index.js",
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "ts-node src/index.ts",
     "scan": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -25,16 +25,22 @@ on:
           - high
           - critical
   pull_request:
-    # Auto-run when security pipeline or sbom implementation changes.
+    # Auto-run when the shared scanning pipeline changes.
     paths:
       - '.github/workflows/security-pipeline.yml'
       - 'sbom/**'
+      - 'cbom/**'
+      - 'runner/**'
+      - 'common/**'
   push:
     branches: [ main ]
-    # Keep main branch continuously validated for scanner changes.
+    # Keep main branch continuously validated for shared scanner changes.
     paths:
       - '.github/workflows/security-pipeline.yml'
       - 'sbom/**'
+      - 'cbom/**'
+      - 'runner/**'
+      - 'common/**'
 
 permissions:
   contents: read
@@ -44,8 +50,8 @@ jobs:
   security:
     runs-on: ubuntu-latest
     env:
-      # Unique per-run output folder used for all generated artifacts.
-      REPORT_DIR: sbom/reports/${{ github.run_id }}-${{ github.run_attempt }}
+      # Root folder where the shared runner writes one timestamped run bundle.
+      REPORT_ROOT: reports/${{ github.run_id }}-${{ github.run_attempt }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
@@ -78,12 +84,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      - name: Install SBOM CLI deps
-        # Installs TypeScript CLI dependencies from sbom/package.json.
+      - name: Install runner and scanner dependencies
+        # The shared runner shells into both sbom and cbom packages, so all
+        # package-level dependencies must exist in CI.
         shell: bash
         run: |
-          cd sbom
-          npm install
+          cd runner
+          npm ci
+          cd ../sbom
+          npm ci
+          cd ../cbom
+          npm ci
 
       - name: Resolve scan source
         id: source
@@ -113,37 +124,6 @@ jobs:
             echo "threshold=high" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Show resolved execution inputs
-        shell: bash
-        run: |
-          echo "Event: ${{ github.event_name }}"
-          echo "Source repo: ${{ steps.source.outputs.repo }}"
-          echo "Source branch: ${{ steps.source.outputs.branch }}"
-          echo "Threshold: ${{ steps.source.outputs.threshold }}"
-          echo "Issue target input: ${{ github.event.inputs.issue_target_repo }}"
-
-      - name: Run scanner CLI
-        # Main engine: clone-or-pull repo, auto-detect stack, generate SBOM, run Trivy, emit reports.
-        shell: bash
-        run: |
-          mkdir -p "$REPORT_DIR"
-          cd sbom
-          npx ts-node src/index.ts \
-            --source "${{ steps.source.outputs.repo }}" \
-            --branch "${{ steps.source.outputs.branch }}" \
-            --threshold "${{ steps.source.outputs.threshold }}" \
-            --output "../$REPORT_DIR" \
-            --fs-scan true \
-            --secret-scan false \
-            --misconfig-scan false
-
-      - name: Resolve generated scan directory
-        id: scan_dir
-        shell: bash
-        run: |
-          scan_dir=$(find "$REPORT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
-          echo "dir=$scan_dir" >> "$GITHUB_OUTPUT"
-
       - name: Resolve issue target repository
         id: issue_repo
         shell: bash
@@ -163,56 +143,58 @@ jobs:
             fi
           fi
 
-      - name: Show resolved issue target
+      - name: Show resolved execution inputs
         shell: bash
         run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Source repo: ${{ steps.source.outputs.repo }}"
+          echo "Source branch: ${{ steps.source.outputs.branch }}"
+          echo "Threshold: ${{ steps.source.outputs.threshold }}"
           echo "Issue target repo: ${{ steps.issue_repo.outputs.repo }}"
 
-      - name: Create or update GitHub issue
+      - name: Run shared CycloGuard runner
+        # Runs the latest combined solution: repo acquisition, CBOM, SBOM,
+        # issue creation, combined Slack message, dashboard, and report bundle.
+        shell: bash
+        env:
+          API_GITHUB_TOKEN: ${{ secrets.API_GITHUB_TOKEN }}
+          GITHUB_TARGET_REPO: ${{ steps.issue_repo.outputs.repo }}
+        run: |
+          mkdir -p "$REPORT_ROOT"
+          cd runner
+          npx ts-node src/index.ts \
+            --source "${{ steps.source.outputs.repo }}" \
+            --branch "${{ steps.source.outputs.branch }}" \
+            --scan all \
+            --threshold "${{ steps.source.outputs.threshold }}" \
+            --output "../$REPORT_ROOT"
+
+      - name: Resolve generated scan directory
+        id: scan_dir
         if: always()
         shell: bash
         run: |
-          node sbom/scripts/create_github_issue.js \
-            --repo "${{ steps.issue_repo.outputs.repo }}" \
-            --report "${{ steps.scan_dir.outputs.dir }}/gate-result.json" \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --token "${{ secrets.API_GITHUB_TOKEN }}" \
-            --source-repo "${{ steps.source.outputs.repo }}" \
-            --source-branch "${{ steps.source.outputs.branch }}" \
-            --output "${{ steps.scan_dir.outputs.dir }}/issue-result.json"
+          scan_dir=$(find "$REPORT_ROOT" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          echo "dir=$scan_dir" >> "$GITHUB_OUTPUT"
 
-      - name: Build Slack payload
-        if: always()
+      - name: Enforce SBOM security gate
+        if: always() && steps.scan_dir.outputs.dir != ''
         shell: bash
         run: |
-          node sbom/scripts/build_slack_payload.js \
-            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --source-repo "${{ steps.source.outputs.repo }}" \
-            --source-branch "${{ steps.source.outputs.branch }}" \
-            --output "${{ steps.scan_dir.outputs.dir }}/slack-payload.json"
-
-      - name: Send Slack notification
-        if: always() && env.SLACK_WEBHOOK_URL != ''
-        shell: bash
-        run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data @"${{ steps.scan_dir.outputs.dir }}/slack-payload.json" \
-            "$SLACK_WEBHOOK_URL"
-
-      - name: Record report history
-        if: always()
-        shell: bash
-        run: |
-          node sbom/scripts/manage_reports.js \
-            --report-dir "${{ steps.scan_dir.outputs.dir }}" \
-            --run-id "${{ github.run_id }}" \
-            --run-attempt "${{ github.run_attempt }}" \
-            --sha "${{ github.sha }}" \
-            --ref "${{ github.ref_name }}" \
-            --actor "${{ github.actor }}" \
-            --source-repo "${{ steps.source.outputs.repo }}" \
-            --source-branch "${{ steps.source.outputs.branch }}"
+          gate_file="${{ steps.scan_dir.outputs.dir }}/sbom/gate-result.json"
+          python - <<'PY' "$gate_file"
+          import json
+          import sys
+          gate_file = sys.argv[1]
+          with open(gate_file, "r", encoding="utf-8") as handle:
+              gate = json.load(handle)
+          gate_failed = bool(gate.get("gate_failed"))
+          threshold = gate.get("threshold", "high")
+          print(f"Gate threshold: {threshold}")
+          print(f"Gate failed: {gate_failed}")
+          if gate_failed:
+              sys.exit(1)
+          PY
 
       - name: Publish workflow summary
         if: always()
@@ -226,8 +208,9 @@ jobs:
             echo "- Scanned branch: \`${{ steps.source.outputs.branch }}\`"
             echo "- Threshold: \`${{ steps.source.outputs.threshold }}\`"
             echo "- Issue target repo: \`${{ steps.issue_repo.outputs.repo }}\`"
-            echo "- Report root: \`${{ env.REPORT_DIR }}\`"
+            echo "- Report root: \`${{ env.REPORT_ROOT }}\`"
             echo "- Scan output folder: \`${{ steps.scan_dir.outputs.dir }}\`"
+            echo "- Dashboard: \`${{ steps.scan_dir.outputs.dir }}/dashboard.html\`"
             echo "- Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -236,50 +219,42 @@ jobs:
         # Useful debugging snapshot before artifact upload.
         shell: bash
         run: |
-          echo "Report directory: $REPORT_DIR"
-          find "$REPORT_DIR" -maxdepth 4 -type f | sort
+          echo "Report root: $REPORT_ROOT"
+          if [[ -n "${{ steps.scan_dir.outputs.dir }}" ]]; then
+            find "${{ steps.scan_dir.outputs.dir }}" -maxdepth 5 -type f | sort
+          else
+            find "$REPORT_ROOT" -maxdepth 5 -type f | sort
+          fi
 
       - name: Upload full report bundle
         if: always()
-        # Canonical artifact containing all outputs from this run.
+        # Canonical artifact containing the full combined runner output.
         uses: actions/upload-artifact@v4
         with:
           name: security-reports-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.REPORT_DIR }}
+          path: ${{ steps.scan_dir.outputs.dir || env.REPORT_ROOT }}
           if-no-files-found: warn
 
-      - name: Upload Trivy Node report
+      - name: Upload dashboard
         if: always()
-        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-node-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.REPORT_DIR }}/trivy-node.json
+          name: dashboard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.scan_dir.outputs.dir }}/dashboard.html
           if-no-files-found: warn
 
-      - name: Upload Trivy Java report
+      - name: Upload SBOM bundle
         if: always()
-        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-java-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.REPORT_DIR }}/trivy-java.json
+          name: sbom-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.scan_dir.outputs.dir }}/sbom
           if-no-files-found: warn
 
-      - name: Upload Trivy Python report
+      - name: Upload CBOM bundle
         if: always()
-        # Convenience artifact: language-specific Trivy summary.
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-python-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.REPORT_DIR }}/trivy-python.json
-          if-no-files-found: warn
-
-      - name: Upload Trivy CSharp report
-        if: always()
-        # Convenience artifact: language-specific Trivy summary.
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-csharp-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.REPORT_DIR }}/trivy-csharp.json
+          name: cbom-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.scan_dir.outputs.dir }}/cbom
           if-no-files-found: warn

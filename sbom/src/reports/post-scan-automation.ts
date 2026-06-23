@@ -6,7 +6,7 @@
 import * as fs from "fs";
 import * as https from "https";
 import * as path from "path";
-import { runNodeScript } from "../core/shell";
+import { runNodeScript } from "../core/shell-command-utils";
 import { Args } from "../types";
 
 type AutomationOptions = {
@@ -48,9 +48,13 @@ function buildRunUrl(outputDir: string): string {
 
 export async function runPostScanAutomation(args: Args, opts: AutomationOptions): Promise<void> {
   const scriptsDir = path.resolve(__dirname, "..", "..", "scripts");
+  const sharedCommonDir = path.resolve(__dirname, "..", "..", "..", "common");
   const gateReport = path.join(opts.outputDir, "gate-result.json");
-  const issueResult = path.join(opts.outputDir, "issue-result.json");
-  const slackPayload = path.join(opts.outputDir, "slack-payload.json");
+  const automationDir = path.join(opts.outputDir, "automation");
+  fs.mkdirSync(automationDir, { recursive: true });
+  const issueResult = path.join(automationDir, "issue-result.json");
+  const slackPayload = path.join(automationDir, "slack-payload.json");
+  const runSummary = path.join(automationDir, "run-summary.json");
   const runUrl = buildRunUrl(opts.outputDir);
 
   if (args.enableIssueCreation && args.githubToken && args.githubRepo) {
@@ -71,8 +75,9 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
   }
 
   if (args.enableSlack) {
-    runNodeScript(path.join(scriptsDir, "build_slack_payload.js"), [
+    runNodeScript(path.join(sharedCommonDir, "build_slack_payload.js"), [
       "--report-dir", opts.outputDir,
+      "--issue-result", issueResult,
       "--run-url", runUrl,
       "--source-repo", opts.sourceRepoLabel,
       "--source-branch", opts.sourceBranch,
@@ -87,6 +92,7 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
 
   runNodeScript(path.join(scriptsDir, "manage_reports.js"), [
     "--report-dir", opts.outputDir,
+    "--issue-result", issueResult,
     "--run-id", new Date().getTime().toString(),
     "--run-attempt", "1",
     "--sha", "local-run",
@@ -94,6 +100,7 @@ export async function runPostScanAutomation(args: Args, opts: AutomationOptions)
     "--actor", process.env.USERNAME || process.env.USER || "local-user",
     "--source-repo", opts.sourceRepoLabel,
     "--source-branch", opts.sourceBranch,
-    "--history-file", opts.historyFile
+    "--history-file", opts.historyFile,
+    "--output", runSummary
   ]);
 }
