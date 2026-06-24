@@ -17,9 +17,21 @@ const sbomRoot = path.resolve(__dirname, "..", "..");
 const trivyInstallScriptUrl = "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh";
 const toolVenvDir = path.join(sbomRoot, ".tool-venv");
 
+function isWindows(): boolean {
+  return process.platform === "win32";
+}
+
+function isMacOS(): boolean {
+  return process.platform === "darwin";
+}
+
+function isLinux(): boolean {
+  return !isWindows() && !isMacOS();
+}
+
 function ensureDirectoryInPath(directory: string): void {
   const currPath = process.env.PATH || "";
-  const delimiter = process.platform === "win32" ? ";" : ":";
+  const delimiter = isWindows() ? ";" : ":";
   if (!currPath.toLowerCase().includes(directory.toLowerCase())) {
     process.env.PATH = `${directory}${delimiter}${currPath}`;
   }
@@ -87,14 +99,14 @@ function canRunShellCommand(command: string): boolean {
 }
 
 function hasCycloneDxCommand(directory: string): boolean {
-  const files = process.platform === "win32"
+  const files = isWindows()
     ? ["cyclonedx-py.exe", "cyclonedx-py-script.py", "cyclonedx-py"]
     : ["cyclonedx-py"];
   return files.some((file) => fs.existsSync(path.join(directory, file)));
 }
 
 function getAvailablePythonCommands(): string[] {
-  const candidates = process.platform === "win32"
+  const candidates = isWindows()
     ? ["py -3", "python", "py"]
     : ["python3", "python"];
 
@@ -102,14 +114,14 @@ function getAvailablePythonCommands(): string[] {
 }
 
 function getToolVenvScriptsDirectory(): string {
-  return process.platform === "win32"
+  return isWindows()
     ? path.join(toolVenvDir, "Scripts")
     : path.join(toolVenvDir, "bin");
 }
 
 function getToolVenvPythonCommand(): string {
   const scriptsDir = getToolVenvScriptsDirectory();
-  return process.platform === "win32"
+  return isWindows()
     ? `"${path.join(scriptsDir, "python.exe")}"`
     : `"${path.join(scriptsDir, "python")}"`;
 }
@@ -169,7 +181,7 @@ function findCycloneDxPyDirectory(pythonCommands: string[]): string | null {
 function ensureCycloneDxPyInPathIfPresent(pythonCommands: string[]): boolean {
   const scriptsDir = findCycloneDxPyDirectory(pythonCommands);
   if (!scriptsDir) return false;
-  if (process.platform === "win32") {
+  if (isWindows()) {
     addDirectoryToWindowsPath(scriptsDir);
   } else {
     ensureDirectoryInPath(scriptsDir);
@@ -364,7 +376,7 @@ export function ensureTools(): void {
 
   if (!commandExists("trivy")) {
     logger.warn("Trivy not found. Attempting automatic installation...");
-    if (process.platform === "win32") {
+    if (isWindows()) {
       if (commandExists("winget")) {
         run("winget install AquaSecurity.Trivy --accept-package-agreements --accept-source-agreements");
         ensureWindowsTrivyInPathIfPresent();
@@ -377,7 +389,7 @@ export function ensureTools(): void {
           "Install Trivy manually: https://github.com/aquasecurity/trivy/releases"
         );
       }
-    } else if (process.platform === "darwin") {
+    } else if (isMacOS()) {
       if (commandExists("brew")) {
         run("brew install trivy");
       } else {
@@ -386,12 +398,12 @@ export function ensureTools(): void {
           "Install Trivy manually: https://github.com/aquasecurity/trivy/releases"
         );
       }
-    } else {
+    } else if (isLinux()) {
       installTrivyOnLinux();
     }
   }
 
-  if (process.platform === "win32" && !commandExists("trivy")) {
+  if (isWindows() && !commandExists("trivy")) {
     ensureWindowsTrivyInPathIfPresent();
   }
 
