@@ -189,6 +189,75 @@ function ensureCycloneDxPyInPathIfPresent(pythonCommands: string[]): boolean {
   return true;
 }
 
+function removeToolVenvDirectory(): void {
+  if (fs.existsSync(toolVenvDir)) {
+    fs.rmSync(toolVenvDir, { recursive: true, force: true });
+  }
+}
+
+function getPythonMajorMinorVersion(pythonCommand: string): string | null {
+  try {
+    const output = runCapture(
+      `${pythonCommand} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"` ,
+      { quiet: true, displayCommand: `${pythonCommand} -c <python-version>` }
+    );
+    const version = output.trim();
+    return version || null;
+  } catch {
+    return null;
+  }
+}
+
+function installLinuxPythonVenvSupport(pythonCommand: string): boolean {
+  if (!isLinux() || !commandExists("apt-get") || !commandExists("sudo")) {
+    return false;
+  }
+
+  run("sudo apt-get update");
+
+  let installed = false;
+  try {
+    run("sudo apt-get install -y python3-venv");
+    installed = true;
+  } catch {
+    const version = getPythonMajorMinorVersion(pythonCommand);
+    if (!version) {
+      return false;
+    }
+
+    try {
+      run(`sudo apt-get install -y python${version}-venv`);
+      installed = true;
+    } catch {
+      return false;
+    }
+  }
+
+  return installed;
+}
+
+function buildPythonVenvSupportError(): string {
+  if (isLinux()) {
+    return (
+      "Unable to create the local Python tool virtual environment because Python venv support is missing.\n" +
+      "On Debian/Ubuntu install it with: sudo apt-get install python3-venv\n" +
+      "If your distribution uses a versioned package, install python3.x-venv for the active Python version."
+    );
+  }
+
+  if (isMacOS()) {
+    return (
+      "Unable to create the local Python tool virtual environment.\n" +
+      "Ensure Python 3 is installed with venv support, then rerun CycloGuard."
+    );
+  }
+
+  return (
+    "Unable to create the local Python tool virtual environment.\n" +
+    "Ensure Python 3 is installed with venv support, then rerun CycloGuard."
+  );
+}
+
 function ensurePythonToolVenv(pythonCommands: string[]): void {
   if (ensureToolVenvInPathIfPresent() && hasCycloneDxCommand(getToolVenvScriptsDirectory())) {
     return;
@@ -200,25 +269,43 @@ function ensurePythonToolVenv(pythonCommands: string[]): void {
     );
   }
 
-  if (!fs.existsSync(toolVenvDir)) {
-    let created = false;
-    for (const pythonCommand of pythonCommands) {
-      try {
-        run(`${pythonCommand} -m venv "${toolVenvDir}"`, {
-          displayCommand: `${pythonCommand} -m venv <sbom>/.tool-venv`
-        });
-        created = true;
-        break;
-      } catch {
-        continue;
+  if (fs.existsSync(getToolVenvScriptsDirectory())) {
+    ensureToolVenvInPathIfPresent();
+    return;
+  }
+
+  let created = false;
+  let attemptedLinuxVenvInstall = false;
+
+  for (const pythonCommand of pythonCommands) {
+    removeToolVenvDirectory();
+
+    try {
+      run(`${pythonCommand} -m venv "${toolVenvDir}"`, {
+        displayCommand: `${pythonCommand} -m venv <sbom>/.tool-venv`
+      });
+      created = true;
+      break;
+    } catch {
+      removeToolVenvDirectory();
+
+      if (!attemptedLinuxVenvInstall && installLinuxPythonVenvSupport(pythonCommand)) {
+        attemptedLinuxVenvInstall = true;
+        try {
+          run(`${pythonCommand} -m venv "${toolVenvDir}"`, {
+            displayCommand: `${pythonCommand} -m venv <sbom>/.tool-venv`
+          });
+          created = true;
+          break;
+        } catch {
+          removeToolVenvDirectory();
+        }
       }
     }
+  }
 
-    if (!created) {
-      throw new Error(
-        "Unable to create the local Python tool virtual environment. Ensure Python 3 venv support is installed."
-      );
-    }
+  if (!created) {
+    throw new Error(buildPythonVenvSupportError());
   }
 
   ensureToolVenvInPathIfPresent();
