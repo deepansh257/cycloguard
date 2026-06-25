@@ -15,10 +15,23 @@ const { createAppLogger } = require(path.resolve(__dirname, "..", "..", "..", "c
 const logger = createAppLogger({ pino });
 const sbomRoot = path.resolve(__dirname, "..", "..");
 const trivyInstallScriptUrl = "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh";
+const toolVenvDir = path.join(sbomRoot, ".tool-venv");
+
+function isWindows(): boolean {
+  return process.platform === "win32";
+}
+
+function isMacOS(): boolean {
+  return process.platform === "darwin";
+}
+
+function isLinux(): boolean {
+  return !isWindows() && !isMacOS();
+}
 
 function ensureDirectoryInPath(directory: string): void {
   const currPath = process.env.PATH || "";
-  const delimiter = process.platform === "win32" ? ";" : ":";
+  const delimiter = isWindows() ? ";" : ":";
   if (!currPath.toLowerCase().includes(directory.toLowerCase())) {
     process.env.PATH = `${directory}${delimiter}${currPath}`;
   }
@@ -86,18 +99,40 @@ function canRunShellCommand(command: string): boolean {
 }
 
 function hasCycloneDxCommand(directory: string): boolean {
-  const files = process.platform === "win32"
+  const files = isWindows()
     ? ["cyclonedx-py.exe", "cyclonedx-py-script.py", "cyclonedx-py"]
     : ["cyclonedx-py"];
   return files.some((file) => fs.existsSync(path.join(directory, file)));
 }
 
 function getAvailablePythonCommands(): string[] {
-  const candidates = process.platform === "win32"
+  const candidates = isWindows()
     ? ["py -3", "python", "py"]
     : ["python3", "python"];
 
   return [...new Set(candidates)].filter((command) => canRunShellCommand(`${command} --version`));
+}
+
+function getToolVenvScriptsDirectory(): string {
+  return isWindows()
+    ? path.join(toolVenvDir, "Scripts")
+    : path.join(toolVenvDir, "bin");
+}
+
+function getToolVenvPythonCommand(): string {
+  const scriptsDir = getToolVenvScriptsDirectory();
+  return isWindows()
+    ? `"${path.join(scriptsDir, "python.exe")}"`
+    : `"${path.join(scriptsDir, "python")}"`;
+}
+
+function ensureToolVenvInPathIfPresent(): boolean {
+  const scriptsDir = getToolVenvScriptsDirectory();
+  if (!fs.existsSync(scriptsDir)) {
+    return false;
+  }
+  ensureDirectoryInPath(scriptsDir);
+  return true;
 }
 
 function getPythonScriptsDirectory(pythonCommand: string): string | null {
@@ -128,6 +163,11 @@ function getPythonScriptsDirectory(pythonCommand: string): string | null {
 }
 
 function findCycloneDxPyDirectory(pythonCommands: string[]): string | null {
+  const toolVenvScriptsDir = getToolVenvScriptsDirectory();
+  if (fs.existsSync(toolVenvScriptsDir) && hasCycloneDxCommand(toolVenvScriptsDir)) {
+    return toolVenvScriptsDir;
+  }
+
   for (const pythonCommand of pythonCommands) {
     const scriptsDir = getPythonScriptsDirectory(pythonCommand);
     if (scriptsDir && hasCycloneDxCommand(scriptsDir)) {
@@ -141,12 +181,75 @@ function findCycloneDxPyDirectory(pythonCommands: string[]): string | null {
 function ensureCycloneDxPyInPathIfPresent(pythonCommands: string[]): boolean {
   const scriptsDir = findCycloneDxPyDirectory(pythonCommands);
   if (!scriptsDir) return false;
-  if (process.platform === "win32") {
+  if (isWindows()) {
     addDirectoryToWindowsPath(scriptsDir);
   } else {
     ensureDirectoryInPath(scriptsDir);
   }
   return true;
+}
+
+function ensurePythonToolVenv(pythonCommands: string[]): void {
+  if (ensureToolVenvInPathIfPresent() && hasCycloneDxCommand(getToolVenvScriptsDirectory())) {
+    return;
+  }
+
+  if (pythonCommands.length === 0) {
+    throw new Error(
+      "Python 3 was not found. Install Python 3 with venv support to bootstrap cyclonedx-bom."
+    );
+  }
+
+  if (!fs.existsSync(toolVenvDir)) {
+    let created = false;
+    for (const pythonCommand of pythonCommands) {
+      try {
+        run(`${pythonCommand} -m venv "${toolVenvDir}"`, {
+          displayCommand: `${pythonCommand} -m venv <sbom>/.tool-venv`
+        });
+        created = true;
+        break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (!created) {
+      throw new Error(
+        "Unable to create the local Python tool virtual environment. Ensure Python 3 venv support is installed."
+      );
+    }
+  }
+
+  ensureToolVenvInPathIfPresent();
+}
+
+function ensurePipAvailableInToolVenv(): void {
+  const pythonCommand = getToolVenvPythonCommand();
+  try {
+    run(`${pythonCommand} -m ensurepip --upgrade`, {
+      displayCommand: "<sbom>/.tool-venv python -m ensurepip --upgrade"
+    });
+  } catch {
+    // Some Python distributions already bundle pip in venvs or do not expose ensurepip.
+  }
+}
+
+function installCycloneDxPyInsideToolVenv(): void {
+  const pythonCommand = getToolVenvPythonCommand();
+  ensurePipAvailableInToolVenv();
+
+  try {
+    run(`${pythonCommand} -m pip install --upgrade pip`, {
+      displayCommand: "<sbom>/.tool-venv python -m pip install --upgrade pip"
+    });
+  } catch {
+    // A pip self-upgrade failure should not block the actual tool installation.
+  }
+
+  run(`${pythonCommand} -m pip install cyclonedx-bom`, {
+    displayCommand: "<sbom>/.tool-venv python -m pip install cyclonedx-bom"
+  });
 }
 
 function ensureLocalCdxgenInPath(): boolean {
@@ -189,30 +292,9 @@ function ensureCdxgenAvailable(): void {
 }
 
 function installCycloneDxPy(pythonCommands: string[]): void {
-  for (const pythonCommand of pythonCommands) {
-    try {
-      run(`${pythonCommand} -m pip install cyclonedx-bom`, {
-        displayCommand: `${pythonCommand} -m pip install cyclonedx-bom`
-      });
-      return;
-    } catch {
-      continue;
-    }
-  }
-
-  if (commandExists("pip3")) {
-    run("pip3 install cyclonedx-bom");
-    return;
-  }
-
-  if (commandExists("pip")) {
-    run("pip install cyclonedx-bom");
-    return;
-  }
-
-  throw new Error(
-    "Python/pip was not found for cyclonedx-bom installation. Install Python 3 with pip and retry."
-  );
+  ensurePythonToolVenv(pythonCommands);
+  installCycloneDxPyInsideToolVenv();
+  ensureToolVenvInPathIfPresent();
 }
 
 function installTrivyOnLinux(): void {
@@ -276,6 +358,8 @@ export function ensureTools(): void {
   ensureCdxgenAvailable();
   const pythonCommands = getAvailablePythonCommands();
 
+  ensureToolVenvInPathIfPresent();
+
   if (!commandExists("cyclonedx-py")) {
     installCycloneDxPy(pythonCommands);
   }
@@ -292,7 +376,7 @@ export function ensureTools(): void {
 
   if (!commandExists("trivy")) {
     logger.warn("Trivy not found. Attempting automatic installation...");
-    if (process.platform === "win32") {
+    if (isWindows()) {
       if (commandExists("winget")) {
         run("winget install AquaSecurity.Trivy --accept-package-agreements --accept-source-agreements");
         ensureWindowsTrivyInPathIfPresent();
@@ -305,7 +389,7 @@ export function ensureTools(): void {
           "Install Trivy manually: https://github.com/aquasecurity/trivy/releases"
         );
       }
-    } else if (process.platform === "darwin") {
+    } else if (isMacOS()) {
       if (commandExists("brew")) {
         run("brew install trivy");
       } else {
@@ -314,12 +398,12 @@ export function ensureTools(): void {
           "Install Trivy manually: https://github.com/aquasecurity/trivy/releases"
         );
       }
-    } else {
+    } else if (isLinux()) {
       installTrivyOnLinux();
     }
   }
 
-  if (process.platform === "win32" && !commandExists("trivy")) {
+  if (isWindows() && !commandExists("trivy")) {
     ensureWindowsTrivyInPathIfPresent();
   }
 
