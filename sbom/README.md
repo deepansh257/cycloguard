@@ -33,12 +33,22 @@ Supported stacks:
 ## Local usage
 Install once:
 ```bash
-cd sbom
+cd cycloguard
 npm install
 ```
 
+Recommended full scan from the repository root:
+```bash
+npx cycloguard --source https://github.com/juice-shop/juice-shop --scan all --no-cache
+```
+
+This is the recommended top-level command when you want the unified CycloGuard flow. It is preferred over older `npm run scan -- --source ...` usage because it uses the CLI entrypoint directly and avoids shell-specific argument forwarding issues, especially on Windows PowerShell.
+
+Run SBOM only from the `sbom/` package:
+
 Scan GitHub repo:
 ```bash
+cd sbom
 npx ts-node src/index.ts --source https://github.com/org/repo --branch main --output ./runs/repo-scan
 ```
 

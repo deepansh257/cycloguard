@@ -50,14 +50,23 @@ It combines two scanning engines:
 ## Installation
 
 ```bash
-git clone https://github.com/your-org/cbom-js
-cd cbom-js
+git clone https://github.com/deepansh257/cycloguard.git
+cd cycloguard
 npm install
 ```
 
 ---
 
 ## Quick Start
+
+**Run the full CycloGuard workflow from the repository root:**
+```bash
+npx cycloguard --source https://github.com/juice-shop/juice-shop --scan all --no-cache
+```
+
+This is the recommended top-level command when you want both SBOM and CBOM together. It is preferred over older `npm run scan -- --source ...` usage because it uses the CLI entrypoint directly and avoids shell-specific argument forwarding issues, especially on Windows PowerShell.
+
+**Run CBOM only from the `cbom/` package:**
 
 **Scan a local directory:**
 ```bash
@@ -86,12 +95,15 @@ npx ts-node src/index.ts \
 |------|-------------|---------|
 | `--source <path\|url>` | Local directory path or remote Git URL to scan | *(required)* |
 | `--output <file>` | Output file path for the CBOM JSON | `cbom.json` |
-| `--format <format>` | Output format (`cyclonedx`) | `cyclonedx` |
+| `--branch <name>` | Git branch to clone for remote sources | default branch |
+| `--fail-on-weak` | Exit with code `1` if any weak algorithms are found | `false` |
+| `--fail-on-severity <level>` | Exit with code `1` if findings exist at or above the given severity | unset |
+| `--verbose` | Print every individual finding to the console | `false` |
+| `--exclude <patterns>` | Comma-separated glob patterns to exclude from scanning | none |
+| `--include <patterns>` | Comma-separated glob patterns to include in scanning | auto-detected by language |
 | `--codeql` | Enable CodeQL taint analysis pass | `false` |
 | `--codeql-path <path>` | Absolute path to the `codeql` / `codeql.exe` binary | `codeql` (must be on PATH) |
-| `--branch <name>` | Git branch to clone for remote sources | default branch |
-| `--verbose` | Print every individual finding to the console | `false` |
-| `--clear-cache` | Delete all cached repositories and CodeQL databases | `false` |
+| `--lang <languages>` | Comma-separated language filter such as `js`, `java`, `python`, `csharp` | auto-detect |
 
 ---
 
@@ -235,13 +247,7 @@ The fingerprint is derived from the **git commit SHA** of the source (for git re
 
 ### Clearing the Cache
 
-To clear all cached repositories and CodeQL databases:
-
-```bash
-npx ts-node src/index.ts --clear-cache
-```
-
-Or manually delete:
+Clear the cache manually:
 ```bash
 # All caches
 rm -rf ~/.cbom-js/

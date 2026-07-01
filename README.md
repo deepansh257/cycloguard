@@ -124,6 +124,35 @@ GIT_USER_NAME=CycloGuard Bot
 GIT_USER_EMAIL=your-email@example.com
 ```
 
+## Recommended Scan Command
+
+Use the CycloGuard CLI entrypoint directly when scanning a repository:
+
+```bash
+npx cycloguard --source <repo> --scan all --no-cache
+```
+
+Example:
+
+```bash
+npx cycloguard --source https://github.com/juice-shop/juice-shop --scan all --no-cache
+```
+
+This command is now recommended instead of older forms such as:
+
+```bash
+npm run scan -- --source <repo> --scan all
+```
+
+Why this was changed:
+
+- `npx cycloguard ...` uses the project CLI entrypoint directly
+- it avoids shell-specific argument forwarding issues seen with `npm run ... -- ...`, especially on Windows PowerShell
+- it keeps the execution path consistent across Windows, macOS, and Linux
+- `--no-cache` is useful when validating fresh repository state instead of reusing a previously cached clone
+
+In short, the command was updated for better cross-platform reliability and more predictable argument handling.
+
 ## Report and Artifact Model
 
 CycloGuard stores outputs in a run-specific directory so each scan remains isolated.
