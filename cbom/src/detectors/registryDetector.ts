@@ -121,6 +121,11 @@ export function detectFromRegistry(
     }
   });
 
+  // Fallback for simple registry-style member calls in source text.
+  // This keeps AST detection primary while covering files where traversal
+  // unexpectedly misses patterns such as crypto.createHash('md5').
+  findings.push(...detectSimpleMemberCallFallbacks(aliasMap, filePath, source));
+
   return deduplicateByLocation(findings);
 }
 
@@ -316,6 +321,22 @@ function resolveAlgorithm(
   return null;
 }
 
+function resolveAlgorithmFromLiteral(raw: string, rule: MethodRule): string | null {
+  if (rule.fixedAlgorithm) {
+    const prefix = rule.algoPrefix || '';
+    return (prefix + rule.fixedAlgorithm).toUpperCase();
+  }
+
+  const value = raw.trim();
+  if (value) {
+    const prefix = rule.algoPrefix || '';
+    return (prefix + value).toUpperCase();
+  }
+
+  if (rule.defaultAlgorithm) return rule.defaultAlgorithm.toUpperCase();
+  return null;
+}
+
 // ── Finding builder ───────────────────────────────────────────────────────────
 
 function buildFinding(
@@ -409,4 +430,61 @@ function deduplicateByLocation(findings: CryptoFinding[]): CryptoFinding[] {
     seen.add(key);
     return true;
   });
+}
+
+function detectSimpleMemberCallFallbacks(
+  aliasMap: AliasMap,
+  filePath: string,
+  source: string
+): CryptoFinding[] {
+  const findings: CryptoFinding[] = [];
+  const lines = source.split(/\r?\n/);
+
+  for (const [alias, pkgName] of aliasMap.entries()) {
+    const pkgRule = getPackageRule(pkgName);
+    if (!pkgRule) continue;
+
+    for (const [methodName, methodRule] of Object.entries(pkgRule.methods)) {
+      if (methodRule.detection !== 'memberCall') continue;
+      if (methodRule.algoArgIndex !== undefined && methodRule.algoArgIndex !== 0) continue;
+
+      const pattern = new RegExp(
+        `\\b${escapeRegExp(alias)}\\s*\\.\\s*${escapeRegExp(methodName)}\\s*\\(\\s*(['"\`])([^'"\`]+)\\1`,
+        'g'
+      );
+
+      for (let i = 0; i < lines.length; i++) {
+        const lineText = lines[i];
+        const trimmed = lineText.trim();
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
+          continue;
+        }
+
+        let match: RegExpExecArray | null;
+        pattern.lastIndex = 0;
+        while ((match = pattern.exec(lineText)) !== null) {
+          const algorithm = resolveAlgorithmFromLiteral(match[2], methodRule);
+          if (!algorithm) continue;
+
+          findings.push(
+            buildFinding(
+              algorithm,
+              pkgName,
+              methodRule,
+              filePath,
+              i + 1,
+              match.index,
+              getSnippet(source, i + 1)
+            )
+          );
+        }
+      }
+    }
+  }
+
+  return findings;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

@@ -30,3 +30,5 @@ npm-debug.log*
 remediation
 cbom/src/remediation
 sbom/src/remediation/
+sbom/.npm-cache
+sbom/.tool-venv

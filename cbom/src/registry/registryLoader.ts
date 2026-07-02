@@ -81,6 +81,7 @@ export interface RegistryIndex {
 
   // alias → package name (e.g. 'CryptoJS' → 'crypto-js')
   aliasToPackage: Map<string, string>;
+  aliasToPackageInsensitive: Map<string, string>;
 
   // package name → PackageRule
   packageRules: Map<string, PackageRule>;
@@ -104,6 +105,7 @@ export function getRegistry(): RegistryIndex {
   const registry = JSON.parse(raw) as Registry;
 
   const aliasToPackage = new Map<string, string>();
+  const aliasToPackageInsensitive = new Map<string, string>();
   const packageRules = new Map<string, PackageRule>();
   const algorithmMeta = new Map<string, AlgorithmMeta>();
   const hardcodedVarNames = new Set<string>();
@@ -113,7 +115,10 @@ export function getRegistry(): RegistryIndex {
     packageRules.set(pkgName, pkgRule);
     for (const alias of pkgRule.aliases) {
       aliasToPackage.set(alias, pkgName);
-      aliasToPackage.set(alias.toLowerCase(), pkgName);
+      const insensitiveKey = alias.toLowerCase();
+      if (!aliasToPackageInsensitive.has(insensitiveKey)) {
+        aliasToPackageInsensitive.set(insensitiveKey, pkgName);
+      }
     }
   }
 
@@ -128,7 +133,14 @@ export function getRegistry(): RegistryIndex {
     hardcodedVarNames.add(name.toLowerCase());
   }
 
-  _index = { registry, aliasToPackage, packageRules, algorithmMeta, hardcodedVarNames };
+  _index = {
+    registry,
+    aliasToPackage,
+    aliasToPackageInsensitive,
+    packageRules,
+    algorithmMeta,
+    hardcodedVarNames
+  };
   return _index;
 }
 
@@ -160,8 +172,12 @@ export function getAlgorithmMeta(algorithm: string): AlgorithmMeta {
 }
 
 export function resolvePackage(importName: string): string | null {
-  const { aliasToPackage } = getRegistry();
-  return aliasToPackage.get(importName) || aliasToPackage.get(importName.toLowerCase()) || null;
+  const { aliasToPackage, aliasToPackageInsensitive } = getRegistry();
+  return (
+    aliasToPackage.get(importName) ||
+    aliasToPackageInsensitive.get(importName.toLowerCase()) ||
+    null
+  );
 }
 
 export function getPackageRule(packageName: string): PackageRule | null {

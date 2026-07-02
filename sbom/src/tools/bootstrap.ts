@@ -349,33 +349,119 @@ function ensureLocalCdxgenInPath(): boolean {
   return true;
 }
 
-function ensureCdxgenAvailable(): void {
-  if (commandExists("cdxgen")) {
-    return;
+type CdxgenVerificationResult = {
+  ok: boolean;
+  state: "missing" | "broken" | "healthy";
+  detail: string;
+};
+
+function verifyCdxgenAvailable(): CdxgenVerificationResult {
+  if (!commandExists("cdxgen")) {
+    return {
+      ok: false,
+      state: "missing",
+      detail: "cdxgen command was not found on PATH"
+    };
   }
 
-  if (ensureLocalCdxgenInPath() && commandExists("cdxgen")) {
+  try {
+    const version = runCapture("cdxgen --version", { quiet: true }).trim();
+    return {
+      ok: true,
+      state: "healthy",
+      detail: version || "cdxgen executed successfully"
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      state: "broken",
+      detail: err?.message || "cdxgen command exists but failed to execute"
+    };
+  }
+}
+
+function getNpmGlobalBinDirectory(): string | null {
+  try {
+    const prefix = runCapture("npm prefix -g", { quiet: true }).trim();
+    if (!prefix) {
+      return null;
+    }
+    return isWindows() ? prefix : path.join(prefix, "bin");
+  } catch {
+    return null;
+  }
+}
+
+function ensureNpmGlobalBinInPath(): boolean {
+  const globalBin = getNpmGlobalBinDirectory();
+  if (!globalBin || !fs.existsSync(globalBin)) {
+    return false;
+  }
+  ensureDirectoryInPath(globalBin);
+  return true;
+}
+
+function ensureCdxgenAvailable(): void {
+  const initialCheck = verifyCdxgenAvailable();
+  if (initialCheck.ok) {
     return;
+  }
+  logger.warn(`cdxgen bootstrap: initial check=${initialCheck.state} (${initialCheck.detail})`);
+
+  const localPathAdded = ensureLocalCdxgenInPath();
+  if (localPathAdded) {
+    const localCheck = verifyCdxgenAvailable();
+    if (localCheck.ok) {
+      return;
+    }
+    logger.warn(`cdxgen bootstrap: local binary check=${localCheck.state} (${localCheck.detail})`);
   }
 
   const localCacheDir = path.join(sbomRoot, ".npm-cache");
   fs.mkdirSync(localCacheDir, { recursive: true });
+  const attempts: string[] = [];
 
   try {
     run(
       `npm install --no-save --prefix "${sbomRoot}" @cyclonedx/cdxgen --cache "${localCacheDir}"`,
       { displayCommand: "npm install --no-save --prefix <sbom> @cyclonedx/cdxgen" }
     );
-  } catch {
-    // Fallback to the previous global install path if local install is not possible.
-    run("npm install -g @cyclonedx/cdxgen");
+    attempts.push("local install: succeeded");
+  } catch (err: any) {
+    attempts.push(`local install: failed (${err?.message || "unknown error"})`);
   }
 
   ensureLocalCdxgenInPath();
-
-  if (!commandExists("cdxgen")) {
-    throw new Error("cdxgen was not found after installation. Ensure Node.js/npm can install @cyclonedx/cdxgen.");
+  let postLocalCheck = verifyCdxgenAvailable();
+  if (postLocalCheck.ok) {
+    return;
   }
+  attempts.push(`post-local verification: ${postLocalCheck.state} (${postLocalCheck.detail})`);
+
+  try {
+    run("npm install -g @cyclonedx/cdxgen", {
+      displayCommand: "npm install -g @cyclonedx/cdxgen"
+    });
+    attempts.push("global install: succeeded");
+  } catch (err: any) {
+    attempts.push(`global install: failed (${err?.message || "unknown error"})`);
+  }
+
+  const globalPathAdded = ensureNpmGlobalBinInPath();
+  attempts.push(`global PATH refresh: ${globalPathAdded ? "applied" : "not applied"}`);
+
+  const finalCheck = verifyCdxgenAvailable();
+  if (finalCheck.ok) {
+    return;
+  }
+
+  attempts.push(`final verification: ${finalCheck.state} (${finalCheck.detail})`);
+  throw new Error(
+    "cdxgen bootstrap failed. " +
+    attempts.join("; ") +
+    '. Validate the local toolchain with "npx @cyclonedx/cdxgen --version". ' +
+    "If that fails, clean the npm cache and reinstall dependencies before retrying."
+  );
 }
 
 function installCycloneDxPy(pythonCommands: string[]): void {

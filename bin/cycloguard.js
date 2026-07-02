@@ -1,11 +1,20 @@
 #!/usr/bin/env node
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 
-const args = process.argv.slice(2).join(' ');
-const runnerPath = path.resolve(__dirname, '..', 'runner', 'src', 'index.ts');
+const repoRoot = path.resolve(__dirname, '..');
+const runnerPath = path.join(repoRoot, 'runner', 'src', 'index.ts');
+const tsconfigPath = path.join(repoRoot, 'runner', 'tsconfig.json');
+const tsNodeBin = require.resolve('ts-node/dist/bin.js', { paths: [repoRoot] });
+const args = [tsNodeBin, '-P', tsconfigPath, runnerPath, ...process.argv.slice(2)];
 
-execSync(`npx ts-node "${runnerPath}" ${args}`, {
+const result = spawnSync(process.execPath, args, {
   stdio: 'inherit',
-  cwd: path.resolve(__dirname, '..', 'runner')
+  cwd: repoRoot
 });
+
+if (result.error) {
+  throw result.error;
+}
+
+process.exit(result.status ?? 1);
