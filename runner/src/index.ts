@@ -8,6 +8,7 @@ import { runSbom } from './sbomRunner';
 import { generateDashboard } from './dashboardGenerator';
 import { notifySlack } from './slack';
 import { loadLocalEnv } from './env';
+import { runRemediation } from './remediationRunner';
 
 const { createAppLogger } = require(path.resolve(__dirname, '..', '..', 'common', 'logger.js')) as {
   createAppLogger: (deps: { pino: typeof pino }) => {
@@ -58,6 +59,7 @@ async function main() {
   const codeqlPath = args['codeql-path'] as string | undefined;
   const noCache = args['no-cache'] === true;
   const enableSlack = args['notify-slack'] !== 'false';
+  const enableRemediation = args['enable-remediation'] === true || process.env.ENABLE_AI_REMEDIATION === 'true';
   const slackWebhookUrl = (args['slack-webhook'] as string | undefined) || process.env.SLACK_WEBHOOK_URL;
 
   if (!source) {
@@ -140,6 +142,22 @@ async function main() {
     logger.info(`Dashboard: ${dashboardFile}`);
   } catch (err: any) {
     logger.warn(`Dashboard generation failed: ${err.message}`);
+  }
+
+  if (enableRemediation) {
+    const remediationResult = runRemediation({
+      runDir,
+      sourcePath: localPath,
+      sourceRepo: isGitHubUrl(source) ? source : undefined,
+      sourceBranch: branch || 'default',
+      threshold
+    });
+
+    if (remediationResult.error) {
+      logger.warn(`Remediation: ${remediationResult.error}`);
+    } else {
+      logger.info(`Remediation: output at ${path.join(runDir, 'remediation')}`);
+    }
   }
 
   if (enableSlack) {

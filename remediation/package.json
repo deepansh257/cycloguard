@@ -1,0 +1,16 @@
+{
+  "name": "@cycloguard/remediation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-assisted remediation planner for CycloGuard findings",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  }
+}
