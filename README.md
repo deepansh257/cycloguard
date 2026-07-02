@@ -153,6 +153,47 @@ Why this was changed:
 
 In short, the command was updated for better cross-platform reliability and more predictable argument handling.
 
+## SBOM Troubleshooting
+
+In some repositories, especially older Node.js/Angular projects or forks without a committed lockfile, SBOM generation may complete but the dashboard can still show:
+
+- `0 dependency vulnerabilities`
+- an empty or very small CycloneDX SBOM
+- npm `ERESOLVE unable to resolve dependency tree` messages in the logs
+
+Why this happens:
+
+- `cdxgen` may need to resolve dependencies dynamically when a repository does not provide a usable lockfile
+- during that step, npm can fail on peer-dependency conflicts
+- when npm dependency resolution fails, the generated SBOM may be empty or lower-precision, so Trivy has little or nothing to scan for dependency CVEs
+
+Likely log signal:
+
+```text
+npm install has failed. Generated SBOM will be empty or with a lower precision.
+Set the environment variable NPM_INSTALL_ARGS=--legacy-peer-deps to resolve the dependency resolution issue reported.
+```
+
+Recommended workaround for that case:
+
+```powershell
+$env:NPM_INSTALL_ARGS="--legacy-peer-deps"
+npx cycloguard --source <repo> --scan all --no-cache
+```
+
+Example:
+
+```powershell
+$env:NPM_INSTALL_ARGS="--legacy-peer-deps"
+npx cycloguard --source https://github.com/vulnerable-apps/juice-shop.git --scan all --no-cache
+```
+
+What `legacy-peer-deps` does:
+
+- it tells npm to ignore strict peer-dependency resolution failures and continue using the older install behavior
+- this helps `cdxgen` generate an SBOM for repositories with legacy or inconsistent dependency trees
+- it is a compatibility workaround for SBOM generation and does not actually fix the upstream dependency conflict in the scanned repository
+
 ## Report and Artifact Model
 
 CycloGuard stores outputs in a run-specific directory so each scan remains isolated.
