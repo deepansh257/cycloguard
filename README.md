@@ -7,6 +7,35 @@ CycloGuard is a repository security analysis framework that helps scan source co
 
 It is designed to work against real repositories instead of hardcoded demo apps. A user can provide a local path or a repository URL, and CycloGuard can clone or reuse the source, detect the project stack, run the required scanners, generate reports, and support follow-up automation such as GitHub issues, Slack alerts, and remediation workflows.
 
+## Project Structure
+
+```text
+cycloguard/
+|-- bin/                    # Cross-platform CLI entrypoints
+|-- cbom/                   # Crypto scanning and CBOM generation
+|-- common/                 # Shared utilities such as centralized logging
+|-- remediation/            # AI planning, approval, and remediation apply flow
+|   |-- src/
+|   |   |-- providers/      # OpenAI, Anthropic, Gemini provider adapters
+|   |   |-- apply.ts        # Deterministic apply engine
+|   |   |-- apply-index.ts  # Apply CLI entrypoint
+|   |   |-- args.ts         # Planning CLI argument parsing
+|   |   |-- apply-args.ts   # Apply CLI argument parsing
+|   |   |-- artifact-loader.ts
+|   |   |-- context-builder.ts
+|   |   |-- env.ts
+|   |   |-- index.ts        # Planning entrypoint
+|   |   |-- planner.ts
+|   |   |-- report-writer.ts
+|   |   |-- types.ts
+|-- runner/                 # Unified scan orchestration
+|-- sbom/                   # Dependency scanning and SBOM generation
+|-- cycloguard-output/      # Per-run scan and remediation artifacts
+|-- .env.example            # Shared environment reference
+|-- package.json            # Root scripts and CLI configuration
+`-- README.md               # Root project documentation
+```
+
 ## What CycloGuard Contains
 
 - `sbom/`
@@ -22,6 +51,12 @@ It is designed to work against real repositories instead of hardcoded demo apps.
 - `runner/`
   - Acts as the unified entrypoint for running SBOM and CBOM together
   - Creates a common run folder and organizes outputs
+- `remediation/`
+  - Generates AI-assisted remediation plans from SBOM and CBOM findings
+  - Supports provider-based planning through OpenAI, Anthropic, or Gemini
+  - Creates human approval files for reviewed remediation items
+  - Applies approved deterministic fixes such as exact replacements and dependency upgrades
+  - Records remediation apply results per run
 - `common/`
   - Stores shared cross-project utilities
   - Currently holds the centralized Pino logger implementation
@@ -56,6 +91,76 @@ At a high level, CycloGuard works like this:
 4. SBOM and/or CBOM workflows are executed depending on what the user runs.
 5. Reports are generated and stored in an isolated run directory.
 6. Optional automation can create issues, notify Slack, or begin remediation steps.
+
+## Overall Flow
+
+CycloGuard now supports both scanning and a controlled remediation workflow.
+
+### 1. Source Resolution
+
+- Local paths are scanned directly
+- GitHub repositories are cloned or reused from CycloGuard cache
+- `--no-cache` forces a fresh clone for the run
+
+### 2. Stack Detection
+
+- The runner inspects the source tree
+- It identifies supported ecosystems such as Node.js, Python, Java, and C#
+
+### 3. SBOM and CBOM Execution
+
+- SBOM generates dependency inventories and vulnerability results
+- CBOM detects crypto misuse and related code-level findings
+- Outputs are written into a per-run folder under `cycloguard-output/`
+
+### 4. Dashboard and Automation
+
+- A consolidated dashboard is generated for the run
+- Slack notification and issue automation can use the generated findings
+
+### 5. AI Remediation Planning
+
+When remediation is enabled, CycloGuard:
+
+- reads SBOM and CBOM findings from the current run
+- normalizes them into a common remediation context
+- sends that context to the configured AI provider, or falls back to local rule-based planning
+- writes remediation outputs into the same run folder
+
+Generated remediation artifacts:
+
+- `remediation/remediation-plan.json`
+- `remediation/remediation-summary.md`
+- `remediation/remediation-approval.json`
+
+### 6. Human Approval
+
+- Remediation items are initially created as `proposed`
+- A reviewer updates `remediation-approval.json`
+- Only items marked `approved` are eligible for apply
+
+### 7. Deterministic Remediation Apply
+
+The first apply implementation is intentionally limited to low-risk deterministic operations:
+
+- exact text replacement
+- structured dependency upgrades
+
+CycloGuard does not currently allow free-form AI rewriting of source files.
+
+Apply results are written to:
+
+- `remediation/remediation-apply-result.json`
+
+### 8. Next Planned Stage
+
+The current implementation stops after apply-result generation.
+
+The next stage is:
+
+- validation / re-scan after apply
+- branch or PR creation
+- tighter approval-to-apply workflow automation
 
 ## SBOM Capability
 
@@ -116,13 +221,24 @@ Example entries used in the project:
 API_GITHUB_TOKEN=your_github_token
 GITHUB_TARGET_REPO=owner/repo
 SLACK_WEBHOOK_URL=slack_webhook_url
+AI_PROVIDER=openai
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-4o-mini
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.5-flash
 ENABLE_AI_REMEDIATION=true
 REMEDIATION_BASE_BRANCH=main
 GIT_USER_NAME=CycloGuard Bot
 GIT_USER_EMAIL=your-email@example.com
 ```
+
+AI remediation provider selection currently supports:
+
+- `openai`
+- `anthropic`
+- `gemini`
 
 ## Recommended Scan Command
 
@@ -152,6 +268,26 @@ Why this was changed:
 - `--no-cache` is useful when validating fresh repository state instead of reusing a previously cached clone
 
 In short, the command was updated for better cross-platform reliability and more predictable argument handling.
+
+To run scanning together with remediation planning:
+
+```bash
+npx cycloguard --source <repo> --scan all --no-cache --enable-remediation
+```
+
+Example:
+
+```bash
+npx cycloguard --source https://github.com/juice-shop/juice-shop --scan all --no-cache --enable-remediation
+```
+
+Expected remediation log signals:
+
+```text
+Remediation planner: using AI-generated planning via provider 'gemini'.
+Remediation planning mode: ai
+Remediation planning provider: gemini
+```
 
 ## SBOM Troubleshooting
 
@@ -205,9 +341,83 @@ Typical outputs can include:
 - Trivy reports
 - gate summary files
 - automation results such as issue or Slack payload files
-- remediation and re-scan artifacts
+- remediation plan, approval, and apply-result artifacts
+
+Typical run folder structure:
+
+```text
+cycloguard-output/
+`-- <project>__<branch>__<timestamp>/
+    |-- cbom/
+    |   `-- cbom.json
+    |-- sbom/
+    |   |-- gate-result.json
+    |   `-- ...
+    |-- remediation/
+    |   |-- remediation-plan.json
+    |   |-- remediation-summary.md
+    |   |-- remediation-approval.json
+    |   `-- remediation-apply-result.json
+    `-- dashboard.html
+```
 
 This makes the framework easier to audit, debug, and extend.
+
+## Remediation Workflow
+
+### Generate the plan
+
+Run a scan with remediation enabled:
+
+```powershell
+npx cycloguard --source https://github.com/juice-shop/juice-shop --scan all --no-cache --enable-remediation
+```
+
+### Review and approve items
+
+Open:
+
+- `remediation/remediation-plan.json`
+- `remediation/remediation-summary.md`
+- `remediation/remediation-approval.json`
+
+Change selected approval entries from `proposed` to `approved`.
+
+### Apply approved remediations
+
+Run the apply command against the run directory:
+
+```powershell
+npm run remediation:apply -- --run-dir "C:\Users\RahulSharma\cycloguard\cycloguard-output\<run-folder>"
+```
+
+Notes:
+
+- `--run-dir` must point to the run folder itself
+- not to the `remediation` folder
+- not to `remediation-approval.json`
+
+### Review apply results
+
+Open:
+
+- `remediation/remediation-apply-result.json`
+
+Current apply behavior:
+
+- `applied` means the item was approved and the operation was deterministic and supported
+- `skipped` means the item was approved but not safe or supported for auto-apply
+- `failed` means CycloGuard attempted the operation but the expected file or text state did not match
+
+Current supported auto-apply operations:
+
+- exact `replace`
+- deterministic `upgrade`
+
+Current unsupported auto-apply operations:
+
+- `manual` operations
+- broad or ambiguous AI-authored changes
 
 ## Central Logging
 
