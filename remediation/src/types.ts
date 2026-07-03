@@ -2,6 +2,8 @@
  * Shared types for the remediation module.
  * These keep artifact loading, planning, and reporting aligned on one contract.
  */
+export type AiProvider = "openai" | "anthropic" | "gemini";
+
 export type RemediationArgs = {
   runDir: string;
   sourcePath: string;
@@ -63,6 +65,7 @@ export type RemediationPlanItem = {
 
 export type RemediationPlan = {
   plannerMode: "ai" | "fallback";
+  plannerProvider: AiProvider | "fallback";
   createdAt: string;
   sourceRepo?: string;
   sourceBranch?: string;

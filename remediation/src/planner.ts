@@ -5,19 +5,7 @@
  */
 import { RemediationContext, RemediationPlan, RemediationPlanItem } from "./types";
 import { enrichFinding } from "./context-builder";
-
-type OpenAiMessage = {
-  role: "system" | "user";
-  content: string;
-};
-
-type OpenAiResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
-};
+import { createAiProvider, getConfiguredProviderName } from "./providers";
 
 function createFallbackPlan(context: RemediationContext): RemediationPlan {
   const items: RemediationPlanItem[] = context.findings.map((finding) => {
@@ -100,136 +88,7 @@ function createFallbackPlan(context: RemediationContext): RemediationPlan {
 
   return {
     plannerMode: "fallback",
-    createdAt: new Date().toISOString(),
-    sourceRepo: context.sourceRepo,
-    sourceBranch: context.sourceBranch,
-    sourcePath: context.sourcePath,
-    threshold: context.threshold,
-    reproducibilityWarnings: context.reproducibilityWarnings,
-    items
-  };
-}
-
-function createPrompt(context: RemediationContext): OpenAiMessage[] {
-  return [
-    {
-      role: "system",
-      content: [
-        "You are generating remediation guidance for a security scanning pipeline.",
-        "Return valid JSON only.",
-        "Do not include markdown fences.",
-        "Use this exact shape:",
-        "{\"items\":[{\"id\":\"...\",\"confidence\":\"high|medium|low\",\"rationale\":\"...\",\"recommendedChanges\":[\"...\"],\"targetFile\":\"optional\",\"targetVersion\":\"optional\",\"operations\":[{\"type\":\"replace|upgrade|manual\",\"file\":\"optional\",\"searchText\":\"optional\",\"replaceText\":\"optional\",\"notes\":\"optional\"}],\"reviewNotes\":[\"...\"]}]}"
-      ].join(" ")
-    },
-    {
-      role: "user",
-      content: JSON.stringify({
-        sourceRepo: context.sourceRepo,
-        sourceBranch: context.sourceBranch,
-        sourcePath: context.sourcePath,
-        threshold: context.threshold,
-        reproducibilityWarnings: context.reproducibilityWarnings,
-        findings: context.findings
-      })
-    }
-  ];
-}
-
-function parseJsonObject(content: string): any | null {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const firstBrace = trimmed.indexOf("{");
-    const lastBrace = trimmed.lastIndexOf("}");
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
-    } catch {
-      return null;
-    }
-  }
-}
-
-async function requestAiPlan(context: RemediationContext): Promise<RemediationPlan | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-  if (!apiKey || !context.findings.length) {
-    return null;
-  }
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: createPrompt(context)
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI request failed with status ${response.status}`);
-  }
-
-  const payload = await response.json() as OpenAiResponse;
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    return null;
-  }
-
-  const parsed = parseJsonObject(content);
-  if (!parsed || !Array.isArray(parsed.items)) {
-    return null;
-  }
-
-  const fallbackById = new Map(createFallbackPlan(context).items.map((item) => [item.id, item]));
-  const items = parsed.items
-    .map((item: any) => {
-      const base = fallbackById.get(String(item.id));
-      if (!base) {
-        return null;
-      }
-
-      return {
-        ...base,
-        confidence: item.confidence === "high" || item.confidence === "low" ? item.confidence : "medium",
-        rationale: typeof item.rationale === "string" && item.rationale.trim() ? item.rationale.trim() : base.rationale,
-        recommendedChanges: Array.isArray(item.recommendedChanges) && item.recommendedChanges.length > 0
-          ? item.recommendedChanges.map((entry: unknown) => String(entry))
-          : base.recommendedChanges,
-        targetFile: typeof item.targetFile === "string" ? item.targetFile : base.targetFile,
-        targetVersion: typeof item.targetVersion === "string" ? item.targetVersion : base.targetVersion,
-        operations: Array.isArray(item.operations) && item.operations.length > 0
-          ? item.operations.map((operation: any) => ({
-              type: operation?.type === "replace" || operation?.type === "upgrade" ? operation.type : "manual",
-              file: typeof operation?.file === "string" ? operation.file : undefined,
-              searchText: typeof operation?.searchText === "string" ? operation.searchText : undefined,
-              replaceText: typeof operation?.replaceText === "string" ? operation.replaceText : undefined,
-              notes: typeof operation?.notes === "string" ? operation.notes : undefined
-            }))
-          : base.operations,
-        reviewNotes: Array.isArray(item.reviewNotes)
-          ? item.reviewNotes.map((entry: unknown) => String(entry))
-          : base.reviewNotes
-      } satisfies RemediationPlanItem;
-    })
-    .filter((item: RemediationPlanItem | null): item is RemediationPlanItem => Boolean(item));
-
-  return {
-    plannerMode: "ai",
+    plannerProvider: "fallback",
     createdAt: new Date().toISOString(),
     sourceRepo: context.sourceRepo,
     sourceBranch: context.sourceBranch,
@@ -241,27 +100,34 @@ async function requestAiPlan(context: RemediationContext): Promise<RemediationPl
 }
 
 export async function buildRemediationPlan(context: RemediationContext): Promise<RemediationPlan> {
+  const fallbackPlan = createFallbackPlan(context);
+
   if (!context.findings.length) {
     console.log("Remediation planner: no findings available. Using fallback planning with an empty result set.");
-    return createFallbackPlan(context);
+    return fallbackPlan;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.log("Remediation planner: OPENAI_API_KEY not set. Using local rule-based planning.");
-    return createFallbackPlan(context);
+  const providerName = getConfiguredProviderName();
+  const provider = createAiProvider(providerName);
+  const configurationStatus = provider.getConfigurationStatus();
+
+  if (!configurationStatus.configured) {
+    const reason = configurationStatus.reason || "provider is not configured";
+    console.log(`Remediation planner: provider '${providerName}' is not configured (${reason}). Using local rule-based planning.`);
+    return fallbackPlan;
   }
 
   try {
-    const aiPlan = await requestAiPlan(context);
+    const aiPlan = await provider.generatePlan(context, fallbackPlan);
     if (aiPlan) {
-      console.log("Remediation planner: using AI-generated planning.");
+      console.log(`Remediation planner: using AI-generated planning via provider '${provider.name}'.`);
       return aiPlan;
     }
-    console.warn("Remediation planner: OpenAI response was empty or invalid. Using local rule-based planning.");
+    console.warn(`Remediation planner: provider '${provider.name}' returned an empty or invalid response. Using local rule-based planning.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown OpenAI planning error";
-    console.warn(`Remediation planner: AI planning failed (${message}). Using local rule-based planning.`);
+    console.warn(`Remediation planner: AI planning failed for provider '${provider.name}' (${message}). Using local rule-based planning.`);
   }
 
-  return createFallbackPlan(context);
+  return fallbackPlan;
 }

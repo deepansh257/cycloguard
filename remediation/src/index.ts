@@ -14,10 +14,11 @@ async function main() {
   const context = loadRemediationContext(args);
   const plan = await buildRemediationPlan(context);
   console.log(`Remediation planning mode: ${plan.plannerMode}`);
+  console.log(`Remediation planning provider: ${plan.plannerProvider}`);
   const outputs = writeRemediationOutputs(args.runDir, plan);
 
-  console.log(`AI remediation plan written to ${outputs.planPath}`);
-  console.log(`AI remediation summary written to ${outputs.summaryPath}`);
+  console.log(`Remediation plan written to ${outputs.planPath}`);
+  console.log(`Remediation summary written to ${outputs.summaryPath}`);
 }
 
 main().catch((error: Error) => {

@@ -11,6 +11,7 @@ function toMarkdown(plan: RemediationPlan): string {
   lines.push("# AI Remediation Summary");
   lines.push("");
   lines.push(`- Planner mode: ${plan.plannerMode}`);
+  lines.push(`- Planner provider: ${plan.plannerProvider}`);
   lines.push(`- Created at: ${plan.createdAt}`);
   if (plan.sourceRepo) {
     lines.push(`- Source repo: ${plan.sourceRepo}`);
