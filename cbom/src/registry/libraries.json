@@ -971,7 +971,99 @@
         { "name": "SHA1Digest",        "detection": "newExpression", "fixedAlgorithm": "SHA-1",    "primitive": "hash" },
         { "name": "SHA256Digest",      "detection": "newExpression", "fixedAlgorithm": "SHA-256",  "primitive": "hash" },
         { "name": "SHA512Digest",      "detection": "newExpression", "fixedAlgorithm": "SHA-512",  "primitive": "hash" },
-        { "name": "ConcatenationKDFGenerator", "detection": "newExpression", "fixedAlgorithm": "CONCATENATIONKDF", "primitive": "kdf" }
+        { "name": "ConcatenationKDFGenerator", "detection": "newExpression", "fixedAlgorithm": "CONCATENATIONKDF", "primitive": "kdf" },
+        {
+    "name": "MLKEMKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-KEM-768",
+    "primitive": "kem",
+    "notes": "BC ML-KEM key generation — parameter set may override to 512/1024"
+  },
+  {
+    "name": "MLKEMKeyGenerationParameters",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-KEM-768",
+    "primitive": "kem"
+  },
+  {
+    "name": "MLKEMExtractor",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-KEM-768",
+    "primitive": "kem"
+  },
+  {
+    "name": "MLKEMGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-KEM-768",
+    "primitive": "kem"
+  },
+  {
+    "name": "MLDSAKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-DSA-65",
+    "primitive": "signature",
+    "notes": "BC ML-DSA key generation — parameter set may override to 44/87"
+  },
+  {
+    "name": "MLDSASigner",
+    "detection": "newExpression",
+    "fixedAlgorithm": "ML-DSA-65",
+    "primitive": "signature"
+  },
+  {
+    "name": "SLHDSAKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "SLH-DSA-SHA2-128S",
+    "primitive": "signature"
+  },
+  {
+    "name": "SLHDSASigner",
+    "detection": "newExpression",
+    "fixedAlgorithm": "SLH-DSA-SHA2-128S",
+    "primitive": "signature"
+  },
+  {
+    "name": "KyberKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "KYBER",
+    "primitive": "kem",
+    "notes": "Legacy pre-FIPS BC API — maps to ML-KEM"
+  },
+  {
+    "name": "DilithiumKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "DILITHIUM",
+    "primitive": "signature",
+    "notes": "Legacy pre-FIPS BC API — maps to ML-DSA"
+  },
+  {
+    "name": "SPHINCSPlusKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "SPHINCS+",
+    "primitive": "signature",
+    "notes": "Legacy pre-FIPS BC API — maps to SLH-DSA"
+  },
+  {
+    "name": "FalconKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "FALCON",
+    "primitive": "signature",
+    "notes": "Legacy pre-FIPS BC API — maps to FN-DSA"
+  },
+  {
+    "name": "XMSSKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "XMSS",
+    "primitive": "signature",
+    "notes": "Stateful — verify state management"
+  },
+  {
+    "name": "LMSKeyPairGenerator",
+    "detection": "newExpression",
+    "fixedAlgorithm": "LMS",
+    "primitive": "signature",
+    "notes": "Stateful — verify state management"
+  }
       ]
     },
   
@@ -1338,7 +1430,92 @@
         { "name": "PasswordHasher",                "detection": "newExpression", "fixedAlgorithm": "PBKDF2", "primitive": "kdf",
           "notes": "ASP.NET Core Identity PasswordHasher uses PBKDF2-HMAC-SHA256" }
       ]
+    },
+    "webcrypto-subtle": {
+    "aliases": [
+      "crypto.subtle",
+      "subtle",
+      "webcrypto",
+      "SubtleCrypto"
+    ],
+    "description": "Web Crypto API (SubtleCrypto) — browser and Node.js standard crypto interface",
+    "type": "builtin",
+    "notes": "crypto.subtle.<method>(algorithm, ...). Algorithm is either a string or an object whose 'name' property carries the algorithm. Detection reads algoFromOption 'name' first, falling back to algoArgIndex 0 when the argument is a plain string literal.",
+    "methods": {
+      "digest": {
+        "primitive": "hash",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.digest('SHA-256', data) or subtle.digest({name:'SHA-256'}, data)"
+      },
+      "encrypt": {
+        "primitive": "blockCipher",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.encrypt({name:'AES-GCM', iv}, key, data)"
+      },
+      "decrypt": {
+        "primitive": "blockCipher",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall"
+      },
+      "sign": {
+        "primitive": "signature",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.sign({name:'ECDSA', hash:'SHA-256'}, key, data)"
+      },
+      "verify": {
+        "primitive": "signature",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall"
+      },
+      "generateKey": {
+        "primitive": "pke",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.generateKey({name:'RSA-OAEP', modulusLength:2048}, ...) or {name:'AES-GCM', length:256}"
+      },
+      "deriveKey": {
+        "primitive": "kdf",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.deriveKey({name:'PBKDF2', ...}, ...) or {name:'ECDH', ...}"
+      },
+      "deriveBits": {
+        "primitive": "kdf",
+        "algoArgIndex": 0,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall"
+      },
+      "importKey": {
+        "primitive": "pke",
+        "algoArgIndex": 1,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.importKey(format, keyData, algorithm, ...) — algorithm is the 3rd positional arg"
+      },
+      "wrapKey": {
+        "primitive": "blockCipher",
+        "algoArgIndex": 3,
+        "algoFromOption": "name",
+        "detection": "deepMemberCall",
+        "notes": "subtle.wrapKey(format, key, wrappingKey, wrapAlgo) — wrap algorithm is the 4th positional arg"
+      },
+      "unwrapKey": {
+        "primitive": "blockCipher",
+        "algoFromOption": "name",
+        "detection": "deepMemberCall"
+      }
     }
+  }
   },
 
   "algorithms": {
@@ -1479,7 +1656,324 @@
                     "notes": "Fernet/Data Protection composite authenticated encryption" },
     "AES-256-CBC-HMAC-SHA256": { "weak": false, "quantumSafe": true, "severity": "INFO", "cwe": [],
                     "primitive": "ae", "cryptoFunctions": ["encrypt","decrypt"], "classicalSecurityLevel": 256,
-                    "notes": "ASP.NET Core Data Protection composite authenticated encryption" }
+                    "notes": "ASP.NET Core Data Protection composite authenticated encryption" },
+    "ML-KEM-512": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.4.1",
+    "primitive": "kem",
+    "cryptoFunctions": [
+      "encapsulate",
+      "decapsulate",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "ML-KEM (FIPS 203, formerly Kyber-512) — NIST-standardized post-quantum KEM, Category 1"
+  },
+  "ML-KEM-768": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.4.2",
+    "primitive": "kem",
+    "cryptoFunctions": [
+      "encapsulate",
+      "decapsulate",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 192,
+    "notes": "ML-KEM (FIPS 203, formerly Kyber-768) — NIST-standardized post-quantum KEM, Category 3"
+  },
+  "ML-KEM-1024": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.4.3",
+    "primitive": "kem",
+    "cryptoFunctions": [
+      "encapsulate",
+      "decapsulate",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 256,
+    "notes": "ML-KEM (FIPS 203, formerly Kyber-1024) — NIST-standardized post-quantum KEM, Category 5"
+  },
+  "KYBER": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "kem",
+    "cryptoFunctions": [
+      "encapsulate",
+      "decapsulate",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 192,
+    "notes": "Kyber — pre-standardization name for ML-KEM (FIPS 203). Prefer ML-KEM naming for new code."
+  },
+  "ML-DSA-44": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.3.17",
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "ML-DSA (FIPS 204, formerly Dilithium2) — NIST-standardized post-quantum signature, Category 2"
+  },
+  "ML-DSA-65": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.3.18",
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 192,
+    "notes": "ML-DSA (FIPS 204, formerly Dilithium3) — NIST-standardized post-quantum signature, Category 3"
+  },
+  "ML-DSA-87": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "oid": "2.16.840.1.101.3.4.3.19",
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 256,
+    "notes": "ML-DSA (FIPS 204, formerly Dilithium5) — NIST-standardized post-quantum signature, Category 5"
+  },
+  "DILITHIUM": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 192,
+    "notes": "Dilithium — pre-standardization name for ML-DSA (FIPS 204). Prefer ML-DSA naming for new code."
+  },
+  "SLH-DSA-SHA2-128S": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "SLH-DSA (FIPS 205, formerly SPHINCS+) — stateless hash-based signature, small-signature variant"
+  },
+  "SLH-DSA-SHA2-128F": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "SLH-DSA (FIPS 205, formerly SPHINCS+) — stateless hash-based signature, fast variant"
+  },
+  "SLH-DSA-SHA2-192S": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 192,
+    "notes": "SLH-DSA (FIPS 205, formerly SPHINCS+) — Category 3, small-signature variant"
+  },
+  "SLH-DSA-SHA2-256S": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 256,
+    "notes": "SLH-DSA (FIPS 205, formerly SPHINCS+) — Category 5, small-signature variant"
+  },
+  "SPHINCS+": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "SPHINCS+ — pre-standardization name for SLH-DSA (FIPS 205). Prefer SLH-DSA naming for new code."
+  },
+  "FN-DSA": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "FN-DSA (FIPS 206 draft, formerly Falcon) — lattice-based signature, not yet finalized"
+  },
+  "FALCON": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "Falcon — pre-standardization name for FN-DSA (FIPS 206 draft)."
+  },
+  "XMSS": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "LOW",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "XMSS (RFC 8391) — stateful hash-based signature. Quantum-safe but stateful: key reuse across states is catastrophic. Verify state management."
+  },
+  "LMS": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "LOW",
+    "cwe": [],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify",
+      "keygen"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "LMS (RFC 8554) — stateful hash-based signature. Quantum-safe but stateful: key/state reuse is catastrophic. Verify state management."
+  },
+  "RSASSA-PKCS1-V1_5": {
+    "weak": false,
+    "quantumSafe": false,
+    "severity": "MEDIUM",
+    "cwe": [
+      "CWE-326"
+    ],
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify"
+    ],
+    "classicalSecurityLevel": 112,
+    "notes": "WebCrypto RSASSA-PKCS1-v1_5 — legacy padding, prefer RSA-PSS for new code"
+  },
+  "RSA-PSS": {
+    "weak": false,
+    "quantumSafe": false,
+    "severity": "MEDIUM",
+    "cwe": [
+      "CWE-326"
+    ],
+    "oid": "1.2.840.113549.1.1.10",
+    "primitive": "signature",
+    "cryptoFunctions": [
+      "sign",
+      "verify"
+    ],
+    "classicalSecurityLevel": 112,
+    "notes": "WebCrypto spelling of RSASSA-PSS"
+  },
+  "RSA-OAEP": {
+    "weak": false,
+    "quantumSafe": false,
+    "severity": "MEDIUM",
+    "cwe": [
+      "CWE-326"
+    ],
+    "primitive": "pke",
+    "cryptoFunctions": [
+      "encapsulate",
+      "decapsulate"
+    ],
+    "classicalSecurityLevel": 112,
+    "notes": "RSA-OAEP — preferred RSA encryption padding"
+  },
+  "ECDH-ES": {
+    "weak": false,
+    "quantumSafe": false,
+    "severity": "MEDIUM",
+    "cwe": [
+      "CWE-326"
+    ],
+    "primitive": "keyAgreement",
+    "cryptoFunctions": [
+      "keyDerive"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "ECDH Ephemeral-Static — JOSE/WebCrypto key agreement"
+  },
+  "AES-KW": {
+    "weak": false,
+    "quantumSafe": true,
+    "severity": "INFO",
+    "cwe": [],
+    "primitive": "blockCipher",
+    "cryptoFunctions": [
+      "encrypt",
+      "decrypt"
+    ],
+    "classicalSecurityLevel": 128,
+    "notes": "AES Key Wrap (RFC 3394) — WebCrypto AES-KW"
+  }
 },
 
   "hardcodedPatterns": {

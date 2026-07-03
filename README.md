@@ -93,6 +93,14 @@ It can:
 - generate a CycloneDX-style CBOM JSON output
 - support remediation planning based on generated findings
 
+## CBOM Detection Architecture
+
+CycloGuard's CBOM scanner uses two complementary detection layers, both driven by libraries.json.
+**Layer 1** — Registry-driven AST matching. The libraries.json registry is the single source of truth for crypto detection. Each package entry declares its methods and, for each method, a detection strategy describing the AST node shape to match (staticCall, newExpression, memberCall, deepMemberCall, importedFunction, importedObject). The algorithm name is resolved from one of fixedAlgorithm (constant), algoArgIndex (positional argument), or algoFromOption (options-object key), then looked up in the algorithms block to attach severity, CWE mapping, quantum-safety, OID, primitive type, and classical security level. This layer is fast and precise but operates on a single call site — it cannot resolve values that flow across variables, functions, or files. Adding a new library or algorithm requires only a registry edit, no code change.
+
+**Layer 2** — CodeQL data-flow analysis. CodeQL handles what AST matching structurally cannot: constant propagation (e.g. Signature.getInstance(ALG) where ALG is a static final String defined elsewhere), inter-procedural and cross-file taint (e.g. a hardcoded key literal flowing into a SecretKeySpec constructor), and structural conditions AST can't express (empty X509TrustManager bodies, negative-import conditions). Queries are generated in-memory at runtime and written as temporary .ql files — no static query files exist in the repo. CodeQL databases are cached by git commit SHA.
+The two layers are unioned and deduplicated in the CBOM generator. AST matching provides breadth and speed; CodeQL provides depth on the dynamic and cross-file cases AST alone reports as DYNAMIC-ALGO.
+
 ## Local-First and CI-Friendly
 
 CycloGuard is built so that the same ideas work in both environments:
