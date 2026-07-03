@@ -10,7 +10,8 @@
   "scripts": {
     "prepare": "node -e \"if(process.platform!=='win32'){require('fs').chmodSync('bin/cycloguard.sh','755')}\"",
     "scan": "node ./bin/cycloguard.js",
-    "build": "npm run build --workspaces && npm run build --prefix remediation"
+    "build": "npm run build --workspaces && npm run build --prefix remediation",
+    "remediation:apply": "npm run apply --prefix remediation --"
   },
   "bin": {
     "cycloguard": "./bin/cycloguard.js"

@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "apply": "ts-node src/apply-index.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

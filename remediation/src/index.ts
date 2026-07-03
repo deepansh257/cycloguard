@@ -19,6 +19,7 @@ async function main() {
 
   console.log(`Remediation plan written to ${outputs.planPath}`);
   console.log(`Remediation summary written to ${outputs.summaryPath}`);
+  console.log(`Remediation approval file written to ${outputs.approvalPath}`);
 }
 
 main().catch((error: Error) => {

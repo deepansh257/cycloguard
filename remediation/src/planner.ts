@@ -44,7 +44,9 @@ function createFallbackPlan(context: RemediationContext): RemediationPlan {
               : "Adjust the resolved dependency to a fixed version and refresh the lockfile."
           }
         ],
-        reviewNotes: enriched.reviewNotes
+        reviewNotes: enriched.reviewNotes,
+        approvalStatus: "proposed",
+        autoApplicable: Boolean(targetFile && targetVersion)
       };
     }
 
@@ -82,7 +84,9 @@ function createFallbackPlan(context: RemediationContext): RemediationPlan {
           notes: finding.line ? `Review the code near line ${finding.line}.` : "Review the flagged code path."
         }
       ],
-      reviewNotes: enriched.reviewNotes
+      reviewNotes: enriched.reviewNotes,
+      approvalStatus: "proposed",
+      autoApplicable: Boolean(replacement && finding.snippet && finding.filePath)
     };
   });
 

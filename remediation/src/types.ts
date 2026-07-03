@@ -45,6 +45,8 @@ export type RemediationOperation = {
   notes?: string;
 };
 
+export type RemediationApprovalStatus = "proposed" | "approved" | "rejected" | "applied" | "failed" | "skipped";
+
 export type RemediationPlanItem = {
   id: string;
   sourceType: "sbom" | "cbom";
@@ -61,6 +63,8 @@ export type RemediationPlanItem = {
   recommendedChanges: string[];
   operations: RemediationOperation[];
   reviewNotes?: string[];
+  approvalStatus?: RemediationApprovalStatus;
+  autoApplicable?: boolean;
 };
 
 export type RemediationPlan = {
@@ -73,4 +77,36 @@ export type RemediationPlan = {
   threshold?: string;
   reproducibilityWarnings: string[];
   items: RemediationPlanItem[];
+};
+
+export type RemediationApprovalItem = {
+  id: string;
+  status: Exclude<RemediationApprovalStatus, "applied" | "failed" | "skipped">;
+  notes?: string;
+};
+
+export type RemediationApprovalDocument = {
+  createdAt: string;
+  sourceRepo?: string;
+  sourceBranch?: string;
+  items: RemediationApprovalItem[];
+};
+
+export type RemediationApplyArgs = {
+  runDir: string;
+  sourcePath?: string;
+};
+
+export type RemediationApplyItemResult = {
+  id: string;
+  status: "applied" | "failed" | "skipped";
+  reason: string;
+  filesChanged: string[];
+};
+
+export type RemediationApplyResult = {
+  createdAt: string;
+  runDir: string;
+  sourcePath: string;
+  items: RemediationApplyItemResult[];
 };

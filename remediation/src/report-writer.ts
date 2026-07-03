@@ -4,7 +4,7 @@
  */
 import * as fs from "fs";
 import * as path from "path";
-import { RemediationPlan } from "./types";
+import { RemediationApprovalDocument, RemediationPlan } from "./types";
 
 function toMarkdown(plan: RemediationPlan): string {
   const lines: string[] = [];
@@ -81,13 +81,31 @@ export function writeRemediationOutputs(runDir: string, plan: RemediationPlan) {
 
   const planPath = path.join(remediationDir, "remediation-plan.json");
   const summaryPath = path.join(remediationDir, "remediation-summary.md");
+  const approvalPath = path.join(remediationDir, "remediation-approval.json");
 
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2));
   fs.writeFileSync(summaryPath, toMarkdown(plan), "utf-8");
 
+  if (!fs.existsSync(approvalPath)) {
+    const approvalDocument: RemediationApprovalDocument = {
+      createdAt: new Date().toISOString(),
+      sourceRepo: plan.sourceRepo,
+      sourceBranch: plan.sourceBranch,
+      items: plan.items.map((item) => ({
+        id: item.id,
+        status: item.approvalStatus === "approved" || item.approvalStatus === "rejected"
+          ? item.approvalStatus
+          : "proposed"
+      }))
+    };
+
+    fs.writeFileSync(approvalPath, JSON.stringify(approvalDocument, null, 2));
+  }
+
   return {
     remediationDir,
     planPath,
-    summaryPath
+    summaryPath,
+    approvalPath
   };
 }
